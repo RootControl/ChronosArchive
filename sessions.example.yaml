@@ -1,0 +1,20 @@
+sessions:
+  - name: "auth-refactor"
+    project_path: "/path/to/your/project"
+    goal: "Refactor the authentication module to use JWT tokens. Add unit tests."
+    model: "claude-opus-4-6"         # optional, defaults to claude-opus-4-6
+    tool_permissions:
+      auto_approve_reads: true        # read_file, list_directory, grep auto-approved
+      auto_approve_bash: false        # bash commands always require approval
+      auto_approve_writes: false      # write_file, edit_file always require approval
+    max_turns: 50                     # optional safety cap (default: 50)
+
+  - name: "docs-generator"
+    project_path: "/path/to/another/project"
+    goal: "Generate API documentation for all public Go functions."
+    model: "claude-opus-4-6"
+    tool_permissions:
+      auto_approve_reads: true
+      auto_approve_bash: false
+      auto_approve_writes: true       # allow writes without prompting for this session
+    max_turns: 30
