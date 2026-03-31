@@ -76,6 +76,41 @@ func buildToolDefinitions() []anthropic.ToolUnionParam {
 			},
 			[]string{"pattern"},
 		),
+		mkTool("web_fetch", "Fetch the contents of a URL (GET). Returns status code and body.",
+			map[string]any{
+				"url": strProp("URL to fetch"),
+			},
+			[]string{"url"},
+		),
+		mkTool("http_request", "Make an HTTP request (any method) with optional headers and body.",
+			map[string]any{
+				"method":  strProp("HTTP method (GET, POST, PUT, PATCH, DELETE, etc.)"),
+				"url":     strProp("Request URL"),
+				"headers": map[string]any{"type": "object", "description": "Optional request headers as key-value pairs"},
+				"body":    strProp("Optional request body"),
+			},
+			[]string{"method", "url"},
+		),
+		mkTool("create_directory", "Create a directory (and any missing parents) inside the project.",
+			map[string]any{
+				"path": strProp("Directory path to create (relative to project root)"),
+			},
+			[]string{"path"},
+		),
+		mkTool("move_file", "Move or rename a file or directory within the project.",
+			map[string]any{
+				"source":      strProp("Source path (relative to project root)"),
+				"destination": strProp("Destination path (relative to project root)"),
+			},
+			[]string{"source", "destination"},
+		),
+		mkTool("delete_file", "Delete a file or directory. Set recursive=true to delete a non-empty directory.",
+			map[string]any{
+				"path":      strProp("Path to delete (relative to project root)"),
+				"recursive": boolProp("If true, delete directory and all contents"),
+			},
+			[]string{"path"},
+		),
 	}
 }
 
@@ -96,6 +131,16 @@ func (s *Session) executeTool(toolName string, rawInput json.RawMessage) (string
 		return tools.Bash(projectPath, rawInput)
 	case "grep":
 		return tools.Grep(projectPath, rawInput)
+	case "web_fetch":
+		return tools.WebFetch(rawInput)
+	case "http_request":
+		return tools.HTTPRequest(rawInput)
+	case "create_directory":
+		return tools.CreateDirectory(projectPath, rawInput)
+	case "move_file":
+		return tools.MoveFile(projectPath, rawInput)
+	case "delete_file":
+		return tools.DeleteFile(projectPath, rawInput)
 	default:
 		return "", fmt.Errorf("unknown tool: %s", toolName)
 	}

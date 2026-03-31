@@ -17,6 +17,12 @@ func (s *Session) autoApprove(toolName string) bool {
 		return p.AutoApproveBash
 	case "write_file", "edit_file":
 		return p.AutoApproveWrites
+	case "web_fetch":
+		return p.AutoApproveWebFetch
+	case "http_request":
+		return p.AutoApproveHTTP
+	case "create_directory", "move_file", "delete_file":
+		return p.AutoApproveFileOps
 	}
 	return false
 }
@@ -101,6 +107,27 @@ func formatPermDesc(toolName string, rawInput json.RawMessage) string {
 			path = "."
 		}
 		return fmt.Sprintf("pattern=%q in %s", pattern, path)
+	case "web_fetch":
+		url, _ := m["url"].(string)
+		return url
+	case "http_request":
+		method, _ := m["method"].(string)
+		url, _ := m["url"].(string)
+		return fmt.Sprintf("%s %s", method, url)
+	case "create_directory":
+		path, _ := m["path"].(string)
+		return path
+	case "move_file":
+		src, _ := m["source"].(string)
+		dst, _ := m["destination"].(string)
+		return fmt.Sprintf("%s → %s", src, dst)
+	case "delete_file":
+		path, _ := m["path"].(string)
+		recursive, _ := m["recursive"].(bool)
+		if recursive {
+			return fmt.Sprintf("%s (recursive)", path)
+		}
+		return path
 	}
 	return fmt.Sprintf("%v", m)
 }

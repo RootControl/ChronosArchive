@@ -37,8 +37,8 @@ func (s *Session) Run(ctx context.Context, client *anthropic.Client, tuiSend fun
 		default:
 		}
 
-		// Call the API with streaming.
-		stream := client.Messages.NewStreaming(ctx, anthropic.MessageNewParams{
+		// Build API params.
+		params := anthropic.MessageNewParams{
 			Model:     anthropic.Model(s.Config.Model),
 			MaxTokens: 8192,
 			System: []anthropic.TextBlockParam{
@@ -46,7 +46,18 @@ func (s *Session) Run(ctx context.Context, client *anthropic.Client, tuiSend fun
 			},
 			Messages: messages,
 			Tools:    toolDefs,
-		})
+		}
+		if s.Config.Thinking {
+			budget := int64(s.Config.ThinkingBudget)
+			// MaxTokens must exceed ThinkingBudget; bump if needed.
+			if params.MaxTokens <= budget {
+				params.MaxTokens = budget + 4096
+			}
+			params.Thinking = anthropic.ThinkingConfigParamOfEnabled(budget)
+		}
+
+		// Call the API with streaming.
+		stream := client.Messages.NewStreaming(ctx, params)
 
 		// Accumulate the full message while forwarding text deltas to the TUI.
 		var accumulated anthropic.Message

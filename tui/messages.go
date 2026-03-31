@@ -15,4 +15,20 @@ type NewSessionMsg struct {
 
 // LaunchFunc is called by the TUI when the user submits the add-session form.
 // It must create the session, start its goroutine, and send a NewSessionMsg back.
-type LaunchFunc func(project, goal, name, model string, approveReads, approveBash, approveWrites bool)
+type LaunchFunc func(opts LaunchOpts)
+
+// LaunchOpts carries all configurable fields from the add-session form.
+type LaunchOpts struct {
+	Project        string
+	Goal           string
+	Name           string
+	Model          string
+	ApproveReads   bool
+	ApproveBash    bool
+	ApproveWrites  bool
+	ApproveWeb     bool
+	ApproveHTTP    bool
+	ApproveFileOps bool
+	Thinking       bool
+	ThinkingBudget int
+}

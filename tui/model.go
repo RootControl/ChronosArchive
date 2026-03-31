@@ -63,15 +63,20 @@ type Model struct {
 	launch LaunchFunc
 
 	// Add-session form overlay.
-	formOpen         bool
-	formField        int // 0=project 1=goal 2=name 3=model 4=reads 5=bash 6=writes
-	formProject      string
-	formGoal         string
-	formName         string
-	formModel        string
-	formApproveReads bool
-	formApproveBash  bool
-	formApproveWrites bool
+	formOpen           bool
+	formField          int // 0=project 1=goal 2=name 3=model 4=reads 5=bash 6=writes 7=web 8=http 9=fileops 10=thinking 11=thinkingBudget
+	formProject        string
+	formGoal           string
+	formName           string
+	formModel          string
+	formApproveReads   bool
+	formApproveBash    bool
+	formApproveWrites  bool
+	formApproveWeb     bool
+	formApproveHTTP    bool
+	formApproveFileOps bool
+	formThinking       bool
+	formThinkingBudget string
 }
 
 // NewModel builds the initial Model from a set of sessions.
@@ -147,16 +152,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.formOpen {
 			switch msg.String() {
 			case "esc":
-				m.formOpen = false
-				m.formProject, m.formGoal, m.formName, m.formModel = "", "", "", ""
-				m.formApproveReads, m.formApproveBash, m.formApproveWrites = false, false, false
-				m.formField = 0
+				m.resetForm()
 
 			case "tab", "down":
-				m.formField = (m.formField + 1) % 7
+				m.formField = (m.formField + 1) % 12
 
 			case "shift+tab", "up":
-				m.formField = (m.formField + 6) % 7
+				m.formField = (m.formField + 11) % 12
 
 			case "enter":
 				if m.formProject != "" && m.formGoal != "" {
@@ -165,13 +167,26 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						name = fmt.Sprintf("session-%d", len(m.order)+1)
 					}
 					if m.launch != nil {
-						m.launch(m.formProject, m.formGoal, name, m.formModel,
-							m.formApproveReads, m.formApproveBash, m.formApproveWrites)
+						budget := 10000
+						if m.formThinkingBudget != "" {
+							fmt.Sscanf(m.formThinkingBudget, "%d", &budget)
+						}
+						m.launch(LaunchOpts{
+							Project:        m.formProject,
+							Goal:           m.formGoal,
+							Name:           name,
+							Model:          m.formModel,
+							ApproveReads:   m.formApproveReads,
+							ApproveBash:    m.formApproveBash,
+							ApproveWrites:  m.formApproveWrites,
+							ApproveWeb:     m.formApproveWeb,
+							ApproveHTTP:    m.formApproveHTTP,
+							ApproveFileOps: m.formApproveFileOps,
+							Thinking:       m.formThinking,
+							ThinkingBudget: budget,
+						})
 					}
-					m.formOpen = false
-					m.formProject, m.formGoal, m.formName, m.formModel = "", "", "", ""
-					m.formApproveReads, m.formApproveBash, m.formApproveWrites = false, false, false
-					m.formField = 0
+					m.resetForm()
 				}
 
 			case " ":
@@ -182,6 +197,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.formApproveBash = !m.formApproveBash
 				case 6:
 					m.formApproveWrites = !m.formApproveWrites
+				case 7:
+					m.formApproveWeb = !m.formApproveWeb
+				case 8:
+					m.formApproveHTTP = !m.formApproveHTTP
+				case 9:
+					m.formApproveFileOps = !m.formApproveFileOps
+				case 10:
+					m.formThinking = !m.formThinking
 				}
 
 			case "backspace":
@@ -202,6 +225,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					if len(m.formModel) > 0 {
 						m.formModel = m.formModel[:len(m.formModel)-1]
 					}
+				case 11:
+					if len(m.formThinkingBudget) > 0 {
+						m.formThinkingBudget = m.formThinkingBudget[:len(m.formThinkingBudget)-1]
+					}
 				}
 
 			default:
@@ -216,6 +243,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						m.formName += ch
 					case 3:
 						m.formModel += ch
+					case 11:
+						if ch >= "0" && ch <= "9" {
+							m.formThinkingBudget += ch
+						}
 					}
 				}
 			}
@@ -231,9 +262,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.formOpen = true
 				m.formField = 0
 				m.formModel = "claude-sonnet-4-6"
-				m.formApproveReads = true
-				m.formApproveBash = true
-				m.formApproveWrites = true
+				m.formApproveReads = false
+				m.formApproveBash = false
+				m.formApproveWrites = false
+				m.formApproveWeb = false
+				m.formApproveHTTP = false
+				m.formApproveFileOps = false
+				m.formThinking = false
+				m.formThinkingBudget = ""
 			}
 
 		case "up", "k":
@@ -424,6 +460,11 @@ func (m Model) renderForm() string {
 
 	title := styleBold.Render("Add Session") + "  " + styleGray.Render("[tab] next  [space] toggle  [enter] launch  [esc] cancel")
 
+	thinkingBudget := m.formThinkingBudget
+	if thinkingBudget == "" {
+		thinkingBudget = "10000"
+	}
+
 	rows := []string{
 		title,
 		"",
@@ -439,9 +480,18 @@ func (m Model) renderForm() string {
 		label("Model", m.formField == 3),
 		"  " + textVal(m.formModel, m.formField == 3),
 		"",
+		styleGray.Render("── Permissions ──────────────────────────"),
 		label("Auto-approve reads", m.formField == 4) + "  " + boolVal(m.formApproveReads, m.formField == 4),
 		label("Auto-approve bash", m.formField == 5) + "  " + boolVal(m.formApproveBash, m.formField == 5),
 		label("Auto-approve writes", m.formField == 6) + "  " + boolVal(m.formApproveWrites, m.formField == 6),
+		label("Auto-approve web_fetch", m.formField == 7) + "  " + boolVal(m.formApproveWeb, m.formField == 7),
+		label("Auto-approve http_request", m.formField == 8) + "  " + boolVal(m.formApproveHTTP, m.formField == 8),
+		label("Auto-approve file ops", m.formField == 9) + "  " + boolVal(m.formApproveFileOps, m.formField == 9),
+		"",
+		styleGray.Render("── Thinking ─────────────────────────────"),
+		label("Enable thinking", m.formField == 10) + "  " + boolVal(m.formThinking, m.formField == 10),
+		label("Thinking budget (tokens)", m.formField == 11),
+		"  " + textVal(thinkingBudget, m.formField == 11),
 	}
 
 	if m.formProject == "" || m.formGoal == "" {
@@ -449,6 +499,23 @@ func (m Model) renderForm() string {
 	}
 
 	return styleFormBox.Render(strings.Join(rows, "\n"))
+}
+
+func (m *Model) resetForm() {
+	m.formOpen = false
+	m.formField = 0
+	m.formProject = ""
+	m.formGoal = ""
+	m.formName = ""
+	m.formModel = ""
+	m.formApproveReads = false
+	m.formApproveBash = false
+	m.formApproveWrites = false
+	m.formApproveWeb = false
+	m.formApproveHTTP = false
+	m.formApproveFileOps = false
+	m.formThinking = false
+	m.formThinkingBudget = ""
 }
 
 func (m Model) renderHeader() string {

@@ -22,12 +22,17 @@ type SessionConfig struct {
 	Model           string          `yaml:"model"`
 	ToolPermissions ToolPermissions `yaml:"tool_permissions"`
 	MaxTurns        int             `yaml:"max_turns"`
+	Thinking        bool            `yaml:"thinking"`
+	ThinkingBudget  int             `yaml:"thinking_budget"` // tokens; default 10000 when thinking enabled
 }
 
 type ToolPermissions struct {
-	AutoApproveReads  bool `yaml:"auto_approve_reads"`
-	AutoApproveBash   bool `yaml:"auto_approve_bash"`
-	AutoApproveWrites bool `yaml:"auto_approve_writes"`
+	AutoApproveReads     bool `yaml:"auto_approve_reads"`
+	AutoApproveBash      bool `yaml:"auto_approve_bash"`
+	AutoApproveWrites    bool `yaml:"auto_approve_writes"`
+	AutoApproveWebFetch  bool `yaml:"auto_approve_web_fetch"`
+	AutoApproveHTTP      bool `yaml:"auto_approve_http"`
+	AutoApproveFileOps   bool `yaml:"auto_approve_file_ops"` // create_directory, move_file, delete_file
 }
 
 func Load(path string) (*Config, error) {
@@ -71,6 +76,9 @@ func Resolve(cfg *Config) error {
 		}
 		if s.MaxTurns <= 0 {
 			s.MaxTurns = DefaultMaxTurns
+		}
+		if s.Thinking && s.ThinkingBudget <= 0 {
+			s.ThinkingBudget = 10000
 		}
 	}
 	return nil

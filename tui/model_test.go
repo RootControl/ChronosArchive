@@ -26,11 +26,13 @@ func update(m Model, msg tea.Msg) Model {
 	return next.(Model)
 }
 
+func noopLaunch() LaunchFunc { return func(_ LaunchOpts) {} }
+
 // --- Form open/close ---
 
 func TestFormOpens_WhenLaunchSet(t *testing.T) {
 	m := newTestModel()
-	m.SetLaunch(func(_, _, _, _ string, _, _, _ bool) {})
+	m.SetLaunch(noopLaunch())
 	m = update(m, key("a"))
 	if !m.formOpen {
 		t.Fatal("form should be open after pressing 'a'")
@@ -47,26 +49,39 @@ func TestFormDoesNotOpen_WithoutLaunch(t *testing.T) {
 
 func TestFormDefaults(t *testing.T) {
 	m := newTestModel()
-	m.SetLaunch(func(_, _, _, _ string, _, _, _ bool) {})
+	m.SetLaunch(noopLaunch())
 	m = update(m, key("a"))
 
 	if m.formModel != "claude-sonnet-4-6" {
 		t.Errorf("default model: got %q, want claude-sonnet-4-6", m.formModel)
 	}
-	if !m.formApproveReads {
-		t.Error("auto-approve reads should default to true")
+	// All permissions default to false — must be explicitly enabled.
+	if m.formApproveReads {
+		t.Error("auto-approve reads should default to false")
 	}
-	if !m.formApproveBash {
-		t.Error("auto-approve bash should default to true")
+	if m.formApproveBash {
+		t.Error("auto-approve bash should default to false")
 	}
-	if !m.formApproveWrites {
-		t.Error("auto-approve writes should default to true")
+	if m.formApproveWrites {
+		t.Error("auto-approve writes should default to false")
+	}
+	if m.formApproveWeb {
+		t.Error("auto-approve web should default to false")
+	}
+	if m.formApproveHTTP {
+		t.Error("auto-approve http should default to false")
+	}
+	if m.formApproveFileOps {
+		t.Error("auto-approve file-ops should default to false")
+	}
+	if m.formThinking {
+		t.Error("thinking should default to false")
 	}
 }
 
 func TestFormClosesOnEsc(t *testing.T) {
 	m := newTestModel()
-	m.SetLaunch(func(_, _, _, _ string, _, _, _ bool) {})
+	m.SetLaunch(noopLaunch())
 	m = update(m, key("a"))
 	m = update(m, keySpecial(tea.KeyEsc))
 	if m.formOpen {
@@ -76,9 +91,8 @@ func TestFormClosesOnEsc(t *testing.T) {
 
 func TestFormEsc_ClearsFields(t *testing.T) {
 	m := newTestModel()
-	m.SetLaunch(func(_, _, _, _ string, _, _, _ bool) {})
+	m.SetLaunch(noopLaunch())
 	m = update(m, key("a"))
-	// type into project field
 	for _, ch := range "hello" {
 		m = update(m, key(string(ch)))
 	}
@@ -95,10 +109,10 @@ func TestFormEsc_ClearsFields(t *testing.T) {
 
 func TestFormTab_CyclesFields(t *testing.T) {
 	m := newTestModel()
-	m.SetLaunch(func(_, _, _, _ string, _, _, _ bool) {})
+	m.SetLaunch(noopLaunch())
 	m = update(m, key("a"))
 
-	for i := 1; i < 7; i++ {
+	for i := 1; i < 12; i++ {
 		m = update(m, keySpecial(tea.KeyTab))
 		if m.formField != i {
 			t.Errorf("after %d tabs: formField = %d, want %d", i, m.formField, i)
@@ -115,7 +129,7 @@ func TestFormTab_CyclesFields(t *testing.T) {
 
 func TestFormTyping_ProjectField(t *testing.T) {
 	m := newTestModel()
-	m.SetLaunch(func(_, _, _, _ string, _, _, _ bool) {})
+	m.SetLaunch(noopLaunch())
 	m = update(m, key("a"))
 
 	for _, ch := range "/tmp/proj" {
@@ -128,7 +142,7 @@ func TestFormTyping_ProjectField(t *testing.T) {
 
 func TestFormBackspace(t *testing.T) {
 	m := newTestModel()
-	m.SetLaunch(func(_, _, _, _ string, _, _, _ bool) {})
+	m.SetLaunch(noopLaunch())
 	m = update(m, key("a"))
 
 	m = update(m, key("h"))
@@ -141,49 +155,101 @@ func TestFormBackspace(t *testing.T) {
 
 // --- Bool toggles ---
 
-func TestFormToggle_ApproveBash(t *testing.T) {
-	m := newTestModel()
-	m.SetLaunch(func(_, _, _, _ string, _, _, _ bool) {})
-	m = update(m, key("a"))
-
-	// navigate to bash field (index 5)
-	for i := 0; i < 5; i++ {
-		m = update(m, keySpecial(tea.KeyTab))
-	}
-	before := m.formApproveBash
-	m = update(m, key(" "))
-	if m.formApproveBash == before {
-		t.Error("space should toggle formApproveBash")
-	}
-}
-
 func TestFormToggle_ApproveReads(t *testing.T) {
 	m := newTestModel()
-	m.SetLaunch(func(_, _, _, _ string, _, _, _ bool) {})
+	m.SetLaunch(noopLaunch())
 	m = update(m, key("a"))
 
-	// navigate to reads field (index 4)
 	for i := 0; i < 4; i++ {
 		m = update(m, keySpecial(tea.KeyTab))
 	}
 	m = update(m, key(" "))
-	if m.formApproveReads {
-		t.Error("toggle should have set formApproveReads to false")
+	if !m.formApproveReads {
+		t.Error("toggle should have set formApproveReads to true")
+	}
+}
+
+func TestFormToggle_ApproveBash(t *testing.T) {
+	m := newTestModel()
+	m.SetLaunch(noopLaunch())
+	m = update(m, key("a"))
+
+	for i := 0; i < 5; i++ {
+		m = update(m, keySpecial(tea.KeyTab))
+	}
+	m = update(m, key(" "))
+	if !m.formApproveBash {
+		t.Error("toggle should have set formApproveBash to true")
 	}
 }
 
 func TestFormToggle_ApproveWrites(t *testing.T) {
 	m := newTestModel()
-	m.SetLaunch(func(_, _, _, _ string, _, _, _ bool) {})
+	m.SetLaunch(noopLaunch())
 	m = update(m, key("a"))
 
-	// navigate to writes field (index 6)
 	for i := 0; i < 6; i++ {
 		m = update(m, keySpecial(tea.KeyTab))
 	}
 	m = update(m, key(" "))
-	if m.formApproveWrites {
-		t.Error("toggle should have set formApproveWrites to false")
+	if !m.formApproveWrites {
+		t.Error("toggle should have set formApproveWrites to true")
+	}
+}
+
+func TestFormToggle_ApproveWeb(t *testing.T) {
+	m := newTestModel()
+	m.SetLaunch(noopLaunch())
+	m = update(m, key("a"))
+
+	for i := 0; i < 7; i++ {
+		m = update(m, keySpecial(tea.KeyTab))
+	}
+	m = update(m, key(" "))
+	if !m.formApproveWeb {
+		t.Error("toggle should have set formApproveWeb to true")
+	}
+}
+
+func TestFormToggle_ApproveHTTP(t *testing.T) {
+	m := newTestModel()
+	m.SetLaunch(noopLaunch())
+	m = update(m, key("a"))
+
+	for i := 0; i < 8; i++ {
+		m = update(m, keySpecial(tea.KeyTab))
+	}
+	m = update(m, key(" "))
+	if !m.formApproveHTTP {
+		t.Error("toggle should have set formApproveHTTP to true")
+	}
+}
+
+func TestFormToggle_ApproveFileOps(t *testing.T) {
+	m := newTestModel()
+	m.SetLaunch(noopLaunch())
+	m = update(m, key("a"))
+
+	for i := 0; i < 9; i++ {
+		m = update(m, keySpecial(tea.KeyTab))
+	}
+	m = update(m, key(" "))
+	if !m.formApproveFileOps {
+		t.Error("toggle should have set formApproveFileOps to true")
+	}
+}
+
+func TestFormToggle_Thinking(t *testing.T) {
+	m := newTestModel()
+	m.SetLaunch(noopLaunch())
+	m = update(m, key("a"))
+
+	for i := 0; i < 10; i++ {
+		m = update(m, keySpecial(tea.KeyTab))
+	}
+	m = update(m, key(" "))
+	if !m.formThinking {
+		t.Error("toggle should have set formThinking to true")
 	}
 }
 
@@ -192,7 +258,7 @@ func TestFormToggle_ApproveWrites(t *testing.T) {
 func TestFormEnter_DoesNotLaunch_WhenFieldsEmpty(t *testing.T) {
 	launched := false
 	m := newTestModel()
-	m.SetLaunch(func(_, _, _, _ string, _, _, _ bool) { launched = true })
+	m.SetLaunch(func(_ LaunchOpts) { launched = true })
 	m = update(m, key("a"))
 	m = update(m, keySpecial(tea.KeyEnter))
 	if launched {
@@ -204,52 +270,44 @@ func TestFormEnter_DoesNotLaunch_WhenFieldsEmpty(t *testing.T) {
 }
 
 func TestFormEnter_Launches_WhenValid(t *testing.T) {
-	var gotProject, gotGoal, gotModel string
-	var gotReads, gotBash, gotWrites bool
-
+	var got LaunchOpts
 	m := newTestModel()
-	m.SetLaunch(func(project, goal, _, model string, reads, bash, writes bool) {
-		gotProject = project
-		gotGoal = goal
-		gotModel = model
-		gotReads = reads
-		gotBash = bash
-		gotWrites = writes
-	})
+	m.SetLaunch(func(opts LaunchOpts) { got = opts })
 	m = update(m, key("a"))
 
-	// type project
 	for _, ch := range "/tmp/p" {
 		m = update(m, key(string(ch)))
 	}
-	// tab to goal
 	m = update(m, keySpecial(tea.KeyTab))
 	for _, ch := range "buildit" {
 		m = update(m, key(string(ch)))
 	}
-
 	m = update(m, keySpecial(tea.KeyEnter))
 
 	if m.formOpen {
 		t.Error("form should be closed after successful submit")
 	}
-	if gotProject != "/tmp/p" {
-		t.Errorf("project: got %q", gotProject)
+	if got.Project != "/tmp/p" {
+		t.Errorf("project: got %q", got.Project)
 	}
-	if gotGoal != "buildit" {
-		t.Errorf("goal: got %q", gotGoal)
+	if got.Goal != "buildit" {
+		t.Errorf("goal: got %q", got.Goal)
 	}
-	if gotModel != "claude-sonnet-4-6" {
-		t.Errorf("model: got %q", gotModel)
+	if got.Model != "claude-sonnet-4-6" {
+		t.Errorf("model: got %q", got.Model)
 	}
-	if !gotReads || !gotBash || !gotWrites {
-		t.Errorf("permissions: reads=%v bash=%v writes=%v", gotReads, gotBash, gotWrites)
+	// All permissions default false.
+	if got.ApproveReads || got.ApproveBash || got.ApproveWrites {
+		t.Errorf("permissions should default false: reads=%v bash=%v writes=%v", got.ApproveReads, got.ApproveBash, got.ApproveWrites)
+	}
+	if got.Thinking {
+		t.Error("thinking should default false")
 	}
 }
 
 func TestFormEnter_ClearsFieldsAfterSubmit(t *testing.T) {
 	m := newTestModel()
-	m.SetLaunch(func(_, _, _, _ string, _, _, _ bool) {})
+	m.SetLaunch(noopLaunch())
 	m = update(m, key("a"))
 	for _, ch := range "/p" {
 		m = update(m, key(string(ch)))
@@ -271,7 +329,6 @@ func TestNewSessionMsg_AddsSession(t *testing.T) {
 	m := newTestModel()
 	sc := config.SessionConfig{Name: "new", ProjectPath: "/tmp", Goal: "g", Model: "claude-sonnet-4-6", MaxTurns: 50}
 	s := session.New("s99", sc)
-	s.StartedAt() // ensure non-zero (it's set in New)
 
 	m = update(m, NewSessionMsg{Session: s})
 
@@ -325,7 +382,6 @@ func TestQuit_WhenFormClosed(t *testing.T) {
 	if cmd == nil {
 		t.Fatal("expected quit command")
 	}
-	// tea.Quit returns a Cmd; we just check it's non-nil
 }
 
 func TestNavigation_UpDown(t *testing.T) {
@@ -343,4 +399,3 @@ func TestNavigation_UpDown(t *testing.T) {
 		t.Errorf("after k: selectedIdx = %d, want 0", m.selectedIdx)
 	}
 }
-

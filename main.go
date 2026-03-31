@@ -26,9 +26,14 @@ func main() {
 	flagName := flag.String("name", "session", "session name (used with -goal)")
 	flagModel := flag.String("model", config.DefaultModel, "model (used with -goal)")
 	flagMaxTurns := flag.Int("max-turns", config.DefaultMaxTurns, "max turns (used with -goal)")
-	flagApproveReads := flag.Bool("approve-reads", true, "auto-approve reads (used with -goal)")
-	flagApproveBash := flag.Bool("approve-bash", false, "auto-approve bash (used with -goal)")
-	flagApproveWrites := flag.Bool("approve-writes", false, "auto-approve writes (used with -goal)")
+	flagApproveReads  := flag.Bool("approve-reads",   true,  "auto-approve reads (used with -goal)")
+	flagApproveBash   := flag.Bool("approve-bash",    false, "auto-approve bash (used with -goal)")
+	flagApproveWrites := flag.Bool("approve-writes",  false, "auto-approve writes (used with -goal)")
+	flagApproveWeb    := flag.Bool("approve-web",     false, "auto-approve web_fetch (used with -goal)")
+	flagApproveHTTP   := flag.Bool("approve-http",    false, "auto-approve http_request (used with -goal)")
+	flagApproveFileOps := flag.Bool("approve-file-ops", false, "auto-approve create_directory/move_file/delete_file (used with -goal)")
+	flagThinking       := flag.Bool("thinking",        false, "enable extended thinking (used with -goal)")
+	flagThinkingBudget := flag.Int("thinking-budget",  10000, "thinking token budget (used with -thinking)")
 
 	flag.Parse()
 
@@ -41,15 +46,20 @@ func main() {
 		cfg = &config.Config{
 			Sessions: []config.SessionConfig{
 				{
-					Name:        *flagName,
-					ProjectPath: *flagProject,
-					Goal:        *flagGoal,
-					Model:       *flagModel,
-					MaxTurns:    *flagMaxTurns,
+					Name:           *flagName,
+					ProjectPath:    *flagProject,
+					Goal:           *flagGoal,
+					Model:          *flagModel,
+					MaxTurns:       *flagMaxTurns,
+					Thinking:       *flagThinking,
+					ThinkingBudget: *flagThinkingBudget,
 					ToolPermissions: config.ToolPermissions{
-						AutoApproveReads:  *flagApproveReads,
-						AutoApproveBash:   *flagApproveBash,
-						AutoApproveWrites: *flagApproveWrites,
+						AutoApproveReads:    *flagApproveReads,
+						AutoApproveBash:     *flagApproveBash,
+						AutoApproveWrites:   *flagApproveWrites,
+						AutoApproveWebFetch: *flagApproveWeb,
+						AutoApproveHTTP:     *flagApproveHTTP,
+						AutoApproveFileOps:  *flagApproveFileOps,
 					},
 				},
 			},
@@ -99,16 +109,21 @@ func main() {
 	defer cancel()
 
 	nextID := len(sessions)
-	launchSession := func(project, goal, name, model string, approveReads, approveBash, approveWrites bool) {
+	launchSession := func(opts tui.LaunchOpts) {
 		tmp := &config.Config{Sessions: []config.SessionConfig{{
-			Name:        name,
-			ProjectPath: project,
-			Goal:        goal,
-			Model:       model,
+			Name:           opts.Name,
+			ProjectPath:    opts.Project,
+			Goal:           opts.Goal,
+			Model:          opts.Model,
+			Thinking:       opts.Thinking,
+			ThinkingBudget: opts.ThinkingBudget,
 			ToolPermissions: config.ToolPermissions{
-				AutoApproveReads:  approveReads,
-				AutoApproveBash:   approveBash,
-				AutoApproveWrites: approveWrites,
+				AutoApproveReads:    opts.ApproveReads,
+				AutoApproveBash:     opts.ApproveBash,
+				AutoApproveWrites:   opts.ApproveWrites,
+				AutoApproveWebFetch: opts.ApproveWeb,
+				AutoApproveHTTP:     opts.ApproveHTTP,
+				AutoApproveFileOps:  opts.ApproveFileOps,
 			},
 		}}}
 		if err := config.Resolve(tmp); err != nil {
