@@ -19,12 +19,52 @@ func main() {
 	_ = godotenv.Load() // load .env if present; ignore error if file doesn't exist
 
 	configPath := flag.String("config", "sessions.yaml", "path to sessions config file")
+
+	// Single-session CLI flags — if -goal is set, config file is ignored.
+	flagProject := flag.String("project", "", "project directory for a single session")
+	flagGoal := flag.String("goal", "", "goal for a single session (bypasses -config)")
+	flagName := flag.String("name", "session", "session name (used with -goal)")
+	flagModel := flag.String("model", config.DefaultModel, "model (used with -goal)")
+	flagMaxTurns := flag.Int("max-turns", config.DefaultMaxTurns, "max turns (used with -goal)")
+	flagApproveReads := flag.Bool("approve-reads", true, "auto-approve reads (used with -goal)")
+	flagApproveBash := flag.Bool("approve-bash", false, "auto-approve bash (used with -goal)")
+	flagApproveWrites := flag.Bool("approve-writes", false, "auto-approve writes (used with -goal)")
+
 	flag.Parse()
 
-	cfg, err := config.Load(*configPath)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: %v\n", err)
-		os.Exit(1)
+	var cfg *config.Config
+	if *flagGoal != "" {
+		if *flagProject == "" {
+			fmt.Fprintln(os.Stderr, "error: -project is required when -goal is set")
+			os.Exit(1)
+		}
+		cfg = &config.Config{
+			Sessions: []config.SessionConfig{
+				{
+					Name:        *flagName,
+					ProjectPath: *flagProject,
+					Goal:        *flagGoal,
+					Model:       *flagModel,
+					MaxTurns:    *flagMaxTurns,
+					ToolPermissions: config.ToolPermissions{
+						AutoApproveReads:  *flagApproveReads,
+						AutoApproveBash:   *flagApproveBash,
+						AutoApproveWrites: *flagApproveWrites,
+					},
+				},
+			},
+		}
+		if err := config.Resolve(cfg); err != nil {
+			fmt.Fprintf(os.Stderr, "error: %v\n", err)
+			os.Exit(1)
+		}
+	} else {
+		var err error
+		cfg, err = config.Load(*configPath)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "error: %v\n", err)
+			os.Exit(1)
+		}
 	}
 
 	apiKey := os.Getenv("ANTHROPIC_API_KEY")

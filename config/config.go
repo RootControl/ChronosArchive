@@ -45,21 +45,25 @@ func Load(path string) (*Config, error) {
 		return nil, fmt.Errorf("config has no sessions defined")
 	}
 
+	return &cfg, Resolve(&cfg)
+}
+
+// Resolve validates and normalises all sessions in cfg (absolute paths, defaults).
+func Resolve(cfg *Config) error {
 	for i := range cfg.Sessions {
 		s := &cfg.Sessions[i]
 		if s.Name == "" {
-			return nil, fmt.Errorf("session %d has no name", i)
+			return fmt.Errorf("session %d has no name", i)
 		}
 		if s.ProjectPath == "" {
-			return nil, fmt.Errorf("session %q has no project_path", s.Name)
+			return fmt.Errorf("session %q has no project_path", s.Name)
 		}
 		if s.Goal == "" {
-			return nil, fmt.Errorf("session %q has no goal", s.Name)
+			return fmt.Errorf("session %q has no goal", s.Name)
 		}
-		// Resolve to absolute path
 		abs, err := filepath.Abs(s.ProjectPath)
 		if err != nil {
-			return nil, fmt.Errorf("session %q: resolving project_path: %w", s.Name, err)
+			return fmt.Errorf("session %q: resolving project_path: %w", s.Name, err)
 		}
 		s.ProjectPath = abs
 		if s.Model == "" {
@@ -69,6 +73,5 @@ func Load(path string) (*Config, error) {
 			s.MaxTurns = DefaultMaxTurns
 		}
 	}
-
-	return &cfg, nil
+	return nil
 }
