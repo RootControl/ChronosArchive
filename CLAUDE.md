@@ -12,14 +12,20 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 # Build
 go build ./...
 
-# Run (requires ANTHROPIC_API_KEY env var)
+# Run with config file (requires ANTHROPIC_API_KEY env var)
 export ANTHROPIC_API_KEY=sk-ant-...
 go run main.go -config sessions.yaml
+
+# Run single session via CLI flags (no config file needed)
+go run main.go -project /path/to/project -goal "Refactor auth to use JWT"
+go run main.go -project /path/to/project -goal "..." -name my-session -model claude-sonnet-4-6 -approve-bash -approve-writes
 
 # Test all packages
 go test ./...
 
-# Test tools only
+# Test specific packages
+go test ./config/... -v
+go test ./tui/... -v
 go test ./tools/... -v
 
 # Single-session test without TUI (useful for development)
@@ -33,8 +39,8 @@ go vet ./...
 ## Architecture
 
 ```
-main.go                   Entry point: loads config, builds sessions, starts TUI + goroutines
-config/config.go          YAML schema (SessionConfig, ToolPermissions) + Load()
+main.go                   Entry point: loads config/CLI flags, builds sessions, starts TUI + goroutines
+config/config.go          YAML schema (SessionConfig, ToolPermissions) + Load() + Resolve()
 session/
   session.go              Session struct, state machine, thread-safe accessors
   events.go               tea.Msg types sent to the TUI (StateMsg, LogMsg, PermissionMsg, DoneMsg)
@@ -45,8 +51,8 @@ tools/
   safepath.go             Path traversal check — all tools use SafePath()
   readfile.go / writefile.go / editfile.go / listdir.go / bash.go / grep.go
 tui/
-  model.go                Bubble Tea Model: Init/Update/View, all event handlers
-  messages.go             TickMsg (all other msg types live in session/events.go)
+  model.go                Bubble Tea Model: Init/Update/View, all event handlers + add-session form
+  messages.go             TickMsg, NewSessionMsg, LaunchFunc (other msg types in session/events.go)
   styles.go               Lipgloss color/style constants
 cmd/testloop/main.go      Standalone agent runner without TUI (for debugging)
 sessions.example.yaml     Example config
@@ -71,8 +77,10 @@ sessions.example.yaml     Example config
 
 ### TUI key bindings
 
-`↑↓`/`jk` — navigate sessions · `tab` — toggle panel focus · `y`/`n` — approve/deny · `pgup`/`pgdn` — scroll logs · `q` — quit
+`↑↓`/`jk` — navigate sessions · `tab` — toggle panel focus · `a` — add session · `y`/`n` — approve/deny · `pgup`/`pgdn` — scroll logs · `q` — quit
+
+**Add-session form:** `tab`/`shift+tab` — next/prev field · `space` — toggle bool · `enter` — launch · `esc` — cancel
 
 ## Config format
 
-See `sessions.example.yaml`. Required fields per session: `name`, `project_path`, `goal`.
+See `sessions.example.yaml`. Required fields per session: `name`, `project_path`, `goal`. Alternatively, pass `-project` and `-goal` CLI flags to skip the config file entirely.

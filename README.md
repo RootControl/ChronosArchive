@@ -13,26 +13,55 @@ A Go terminal dashboard that manages multiple parallel AI coding sessions. Each 
 # Build
 go build ./...
 
-# Run
+# Run with a config file (multiple sessions)
 export ANTHROPIC_API_KEY=sk-ant-...
 go run main.go -config sessions.yaml
+
+# Run a single session directly via CLI flags (no config file needed)
+go run main.go -project /path/to/project -goal "Refactor auth to use JWT"
+
+# All CLI flags for single-session mode:
+go run main.go \
+  -project /path/to/project \
+  -goal "Refactor auth to use JWT" \
+  -name my-session \           # default: "session"
+  -model claude-sonnet-4-6 \   # default: claude-opus-4-6
+  -max-turns 30 \              # default: 50
+  -approve-reads \             # default: true
+  -approve-bash \              # default: false
+  -approve-writes              # default: false
 
 # Single-session test without TUI (useful for development)
 go run ./cmd/testloop -project /tmp/test -goal "Create hello.go that prints Hello World"
 go run ./cmd/testloop -project /tmp/test -goal "..." -auto-approve   # skip permission prompts
 ```
 
+### Adding sessions from the TUI
+
+Press `a` while the TUI is running to open the add-session form. Fill in the fields, use `tab` to move between them, `space` to toggle boolean options, and `enter` to launch. The new session starts immediately without restarting.
+
+| Form field | Default |
+|---|---|
+| Project path | _(required)_ |
+| Goal | _(required)_ |
+| Name | auto-generated |
+| Model | `claude-sonnet-4-6` |
+| Auto-approve reads | on |
+| Auto-approve bash | on |
+| Auto-approve writes | on |
+
 ## Config
 
 See `sessions.example.yaml`. Required fields per session: `name`, `project_path`, `goal`.
 
 ```yaml
-# sessions.example.yaml
 sessions:
   - name: my-session
     project_path: /path/to/project
     goal: "Implement feature X"
-    permissions:
+    model: claude-opus-4-6       # optional, default: claude-opus-4-6
+    max_turns: 50                # optional, default: 50
+    tool_permissions:
       auto_approve_reads: true
       auto_approve_bash: false
       auto_approve_writes: false
@@ -52,9 +81,19 @@ sessions:
 |---|---|
 | `↑↓` / `jk` | Navigate sessions |
 | `tab` | Toggle panel focus |
+| `a` | Open add-session form |
 | `y` / `n` | Approve / deny permission |
 | `pgup` / `pgdn` | Scroll logs |
 | `q` | Quit |
+
+**Add-session form keys**
+
+| Key | Action |
+|---|---|
+| `tab` / `shift+tab` | Next / previous field |
+| `space` | Toggle boolean field |
+| `enter` | Launch session |
+| `esc` | Cancel |
 
 ## Architecture
 
