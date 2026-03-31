@@ -54,4 +54,16 @@ var (
 	styleStatusBar = lipgloss.NewStyle().
 			Foreground(colorGray).
 			Padding(0, 1)
+
+	styleFormBox = lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(colorBlue).
+			Foreground(colorWhite).
+			Padding(1, 2).
+			Width(60)
+
+	styleFormLabel    = lipgloss.NewStyle().Foreground(colorGray)
+	styleFormActive   = lipgloss.NewStyle().Foreground(colorWhite).Bold(true)
+	styleFormCursor   = lipgloss.NewStyle().Foreground(colorBlue).Bold(true)
+	styleFormInactive = lipgloss.NewStyle().Foreground(colorGray)
 )

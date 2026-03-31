@@ -98,6 +98,32 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
+	nextID := len(sessions)
+	launchSession := func(project, goal, name, model string, approveReads, approveBash, approveWrites bool) {
+		tmp := &config.Config{Sessions: []config.SessionConfig{{
+			Name:        name,
+			ProjectPath: project,
+			Goal:        goal,
+			Model:       model,
+			ToolPermissions: config.ToolPermissions{
+				AutoApproveReads:  approveReads,
+				AutoApproveBash:   approveBash,
+				AutoApproveWrites: approveWrites,
+			},
+		}}}
+		if err := config.Resolve(tmp); err != nil {
+			return
+		}
+		id := fmt.Sprintf("s%d", nextID)
+		nextID++
+		s := session.New(id, tmp.Sessions[0])
+		prog.Send(tui.NewSessionMsg{Session: s})
+		go s.Run(ctx, &client, func(msg any) {
+			prog.Send(msg)
+		})
+	}
+	model.SetLaunch(launchSession)
+
 	for _, s := range sessions {
 		s := s // capture loop variable
 		go s.Run(ctx, &client, func(msg any) {

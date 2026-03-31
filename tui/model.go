@@ -58,6 +58,20 @@ type Model struct {
 
 	// Set after tea.NewProgram() is created (via SetProgram).
 	program *tea.Program
+
+	// Called when the user submits the add-session form.
+	launch LaunchFunc
+
+	// Add-session form overlay.
+	formOpen         bool
+	formField        int // 0=project 1=goal 2=name 3=model 4=reads 5=bash 6=writes
+	formProject      string
+	formGoal         string
+	formName         string
+	formModel        string
+	formApproveReads bool
+	formApproveBash  bool
+	formApproveWrites bool
 }
 
 // NewModel builds the initial Model from a set of sessions.
@@ -101,6 +115,11 @@ func (m *Model) SetProgram(p *tea.Program) {
 	m.program = p
 }
 
+// SetLaunch provides the callback used when the user submits the add-session form.
+func (m *Model) SetLaunch(fn LaunchFunc) {
+	m.launch = fn
+}
+
 func (m Model) Init() tea.Cmd {
 	return tea.Batch(
 		m.spinner.Tick,
@@ -125,9 +144,97 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.resizeViewport()
 
 	case tea.KeyMsg:
+		if m.formOpen {
+			switch msg.String() {
+			case "esc":
+				m.formOpen = false
+				m.formProject, m.formGoal, m.formName, m.formModel = "", "", "", ""
+				m.formApproveReads, m.formApproveBash, m.formApproveWrites = false, false, false
+				m.formField = 0
+
+			case "tab", "down":
+				m.formField = (m.formField + 1) % 7
+
+			case "shift+tab", "up":
+				m.formField = (m.formField + 6) % 7
+
+			case "enter":
+				if m.formProject != "" && m.formGoal != "" {
+					name := m.formName
+					if name == "" {
+						name = fmt.Sprintf("session-%d", len(m.order)+1)
+					}
+					if m.launch != nil {
+						m.launch(m.formProject, m.formGoal, name, m.formModel,
+							m.formApproveReads, m.formApproveBash, m.formApproveWrites)
+					}
+					m.formOpen = false
+					m.formProject, m.formGoal, m.formName, m.formModel = "", "", "", ""
+					m.formApproveReads, m.formApproveBash, m.formApproveWrites = false, false, false
+					m.formField = 0
+				}
+
+			case " ":
+				switch m.formField {
+				case 4:
+					m.formApproveReads = !m.formApproveReads
+				case 5:
+					m.formApproveBash = !m.formApproveBash
+				case 6:
+					m.formApproveWrites = !m.formApproveWrites
+				}
+
+			case "backspace":
+				switch m.formField {
+				case 0:
+					if len(m.formProject) > 0 {
+						m.formProject = m.formProject[:len(m.formProject)-1]
+					}
+				case 1:
+					if len(m.formGoal) > 0 {
+						m.formGoal = m.formGoal[:len(m.formGoal)-1]
+					}
+				case 2:
+					if len(m.formName) > 0 {
+						m.formName = m.formName[:len(m.formName)-1]
+					}
+				case 3:
+					if len(m.formModel) > 0 {
+						m.formModel = m.formModel[:len(m.formModel)-1]
+					}
+				}
+
+			default:
+				ch := msg.String()
+				if len(ch) == 1 {
+					switch m.formField {
+					case 0:
+						m.formProject += ch
+					case 1:
+						m.formGoal += ch
+					case 2:
+						m.formName += ch
+					case 3:
+						m.formModel += ch
+					}
+				}
+			}
+			break
+		}
+
 		switch msg.String() {
 		case "q", "ctrl+c":
 			return m, tea.Quit
+
+		case "a":
+			if m.launch != nil {
+				m.formOpen = true
+				m.formField = 0
+				m.formModel = "claude-sonnet-4-6"
+				m.formApproveReads = true
+				m.formApproveBash = true
+				m.formApproveWrites = true
+			}
 
 		case "up", "k":
 			if m.selectedIdx > 0 {
@@ -213,6 +320,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		delete(m.pendingPerms, msg.SessionID)
 
+	case NewSessionMsg:
+		s := msg.Session
+		m.order = append(m.order, s.ID)
+		m.views[s.ID] = &sessionView{
+			id:        s.ID,
+			name:      s.Config.Name,
+			state:     session.StateStarting,
+			startedAt: s.StartedAt(),
+		}
+		m.sessions[s.ID] = s
+		m.selectedIdx = len(m.order) - 1
+		m.refreshLogViewport()
+
 	// --- TUI-internal messages ---
 
 	case spinner.TickMsg:
@@ -264,16 +384,76 @@ func (m Model) View() string {
 		styleRightPanel.Width(rightWidth).Height(m.height-3).Render(right),
 	)
 
-	return lipgloss.JoinVertical(lipgloss.Left,
-		header,
-		body,
-		statusBar,
-	)
+	base := lipgloss.JoinVertical(lipgloss.Left, header, body, statusBar)
+
+	if m.formOpen {
+		return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, m.renderForm())
+	}
+
+	return base
+}
+
+func (m Model) renderForm() string {
+	label := func(text string, active bool) string {
+		if active {
+			return styleFormActive.Render(text)
+		}
+		return styleFormLabel.Render(text)
+	}
+	textVal := func(val string, active bool) string {
+		cursor := ""
+		if active {
+			cursor = styleFormCursor.Render("█")
+		}
+		if active {
+			return styleFormActive.Render(val) + cursor
+		}
+		return styleFormInactive.Render(val)
+	}
+	boolVal := func(on bool, active bool) string {
+		indicator := styleRed.Render("[✗]")
+		if on {
+			indicator = styleGreen.Render("[✓]")
+		}
+		hint := styleGray.Render(" [space] toggle")
+		if active {
+			return indicator + hint
+		}
+		return indicator
+	}
+
+	title := styleBold.Render("Add Session") + "  " + styleGray.Render("[tab] next  [space] toggle  [enter] launch  [esc] cancel")
+
+	rows := []string{
+		title,
+		"",
+		label("Project path *", m.formField == 0),
+		"  " + textVal(m.formProject, m.formField == 0),
+		"",
+		label("Goal *", m.formField == 1),
+		"  " + textVal(m.formGoal, m.formField == 1),
+		"",
+		label("Name (optional)", m.formField == 2),
+		"  " + textVal(m.formName, m.formField == 2),
+		"",
+		label("Model", m.formField == 3),
+		"  " + textVal(m.formModel, m.formField == 3),
+		"",
+		label("Auto-approve reads", m.formField == 4) + "  " + boolVal(m.formApproveReads, m.formField == 4),
+		label("Auto-approve bash", m.formField == 5) + "  " + boolVal(m.formApproveBash, m.formField == 5),
+		label("Auto-approve writes", m.formField == 6) + "  " + boolVal(m.formApproveWrites, m.formField == 6),
+	}
+
+	if m.formProject == "" || m.formGoal == "" {
+		rows = append(rows, "", styleGray.Render("  * required"))
+	}
+
+	return styleFormBox.Render(strings.Join(rows, "\n"))
 }
 
 func (m Model) renderHeader() string {
 	title := styleBold.Render("ChronosArchive")
-	help := styleGray.Render("[↑↓/jk] nav  [tab] panel  [y/n] approve  [q] quit")
+	help := styleGray.Render("[↑↓/jk] nav  [tab] panel  [y/n] approve  [a] add  [q] quit")
 	space := strings.Repeat(" ", max(0, m.width-lipgloss.Width(title)-lipgloss.Width(help)-2))
 	return styleHeader.Width(m.width).Render(title + space + help)
 }
