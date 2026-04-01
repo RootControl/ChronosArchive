@@ -24,6 +24,7 @@ type SessionConfig struct {
 	MaxTurns        int             `yaml:"max_turns"`
 	Thinking        bool            `yaml:"thinking"`
 	ThinkingBudget  int             `yaml:"thinking_budget"` // tokens; default 10000 when thinking enabled
+	Batch           bool            `yaml:"batch"`           // submit via Anthropic Message Batches API (50% cost, async, single-turn)
 }
 
 type ToolPermissions struct {

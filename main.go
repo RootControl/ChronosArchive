@@ -34,6 +34,7 @@ func main() {
 	flagApproveFileOps := flag.Bool("approve-file-ops", false, "auto-approve create_directory/move_file/delete_file (used with -goal)")
 	flagThinking       := flag.Bool("thinking",        false, "enable extended thinking (used with -goal)")
 	flagThinkingBudget := flag.Int("thinking-budget",  10000, "thinking token budget (used with -thinking)")
+	flagBatch          := flag.Bool("batch",           false, "submit via Anthropic Message Batches API (50% cost, single-turn, async)")
 
 	flag.Parse()
 
@@ -53,6 +54,7 @@ func main() {
 					MaxTurns:       *flagMaxTurns,
 					Thinking:       *flagThinking,
 					ThinkingBudget: *flagThinkingBudget,
+					Batch:          *flagBatch,
 					ToolPermissions: config.ToolPermissions{
 						AutoApproveReads:    *flagApproveReads,
 						AutoApproveBash:     *flagApproveBash,
@@ -139,9 +141,27 @@ func main() {
 	}
 	model.SetLaunch(launchSession)
 
+	// Separate sessions into batch vs interactive.
+	var batchSessions []*session.Session
+	var normalSessions []*session.Session
 	for _, s := range sessions {
-		s := s // capture loop variable
+		if s.Config.Batch {
+			batchSessions = append(batchSessions, s)
+		} else {
+			normalSessions = append(normalSessions, s)
+		}
+	}
+
+	// Launch interactive sessions individually.
+	for _, s := range normalSessions {
 		go s.Run(ctx, &client, func(msg any) {
+			prog.Send(msg)
+		})
+	}
+
+	// Launch all batch sessions as a single Anthropic Batch API request.
+	if len(batchSessions) > 0 {
+		go session.RunBatch(ctx, &client, batchSessions, func(msg any) {
 			prog.Send(msg)
 		})
 	}

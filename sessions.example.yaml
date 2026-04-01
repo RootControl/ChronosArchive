@@ -28,3 +28,25 @@ sessions:
       auto_approve_http: false
       auto_approve_file_ops: false
     max_turns: 30
+
+  # Batch sessions: submitted together to the Anthropic Message Batches API.
+  # Cost is 50% less than standard API. Trade-offs: single-turn only (no tool
+  # loop), results can take up to 24 hours, no interactive permission prompts.
+  # All sessions with batch: true are grouped into one batch request.
+  - name: "summarise-readme"
+    project_path: "/path/to/project"
+    goal: "Summarise the README in one paragraph and write it to SUMMARY.md"
+    model: "claude-opus-4-6"
+    batch: true                      # submit via Anthropic Message Batches API
+    tool_permissions:
+      auto_approve_reads: true
+      auto_approve_writes: true
+
+  - name: "changelog-draft"
+    project_path: "/path/to/project"
+    goal: "Draft a CHANGELOG entry for the last 10 git commits."
+    model: "claude-opus-4-6"
+    batch: true
+    tool_permissions:
+      auto_approve_reads: true
+      auto_approve_bash: true
