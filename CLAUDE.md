@@ -84,3 +84,10 @@ sessions.example.yaml     Example config
 ## Config format
 
 See `sessions.example.yaml`. Required fields per session: `name`, `project_path`, `goal`. Alternatively, pass `-project` and `-goal` CLI flags to skip the config file entirely.
+
+## Anthropic Go SDK patterns
+
+- Batch API: `client.Messages.Batches.New/Get/ResultsStreaming` — not `client.Batches`
+- Result union types use `AsAny()` type switch, not constants: `switch v := result.AsAny().(type) { case anthropic.MessageBatchSucceededResult: ... }`
+- Batch error message path: `variant.Error.Error.Message` (ErrorResponse → ErrorObjectUnion → Message)
+- Content block text: `block.AsAny().(anthropic.TextBlock)` — no `ContentBlockTypeText` constant exists
