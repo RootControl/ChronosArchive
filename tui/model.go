@@ -351,6 +351,21 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			}
 
+		case "e":
+			if sid := m.selectedSessionID(); sid != "" {
+				if s, ok := m.sessions[sid]; ok {
+					if sv, ok2 := m.views[sid]; ok2 {
+						path, err := exportLog(s, sv.logs)
+						if err != nil {
+							m.statusMsg = "export failed: " + err.Error()
+						} else {
+							m.statusMsg = "exported → " + path
+						}
+						m.statusMsgTTL = 8 // ~4 s
+					}
+				}
+			}
+
 		case "p":
 			if sid := m.selectedSessionID(); sid != "" {
 				if s, ok := m.sessions[sid]; ok {
@@ -625,7 +640,7 @@ func (m *Model) resetForm() {
 
 func (m Model) renderHeader() string {
 	title := styleBold.Render("ChronosArchive")
-	help := styleGray.Render("[↑↓/jk] nav  [tab] panel  [y/n] approve  [a] add  [p] pause  [r] retry  [T] save template  [q] quit")
+	help := styleGray.Render("[↑↓/jk] nav  [tab] panel  [y/n] approve  [a] add  [p] pause  [r] retry  [e] export  [T] template  [q] quit")
 	space := strings.Repeat(" ", max(0, m.width-lipgloss.Width(title)-lipgloss.Width(help)-2))
 	return styleHeader.Width(m.width).Render(title + space + help)
 }
