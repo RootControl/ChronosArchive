@@ -37,6 +37,7 @@ type ToolPermissions struct {
 	AutoApproveWebSearch bool `yaml:"auto_approve_web_search"` // web_search
 	AutoApproveGitReads  bool `yaml:"auto_approve_git_reads"`  // git status/log/diff/branch/show/blame
 	AutoApproveGitWrites bool `yaml:"auto_approve_git_writes"` // git add/commit/checkout/…
+	AutoApproveRunTests  bool `yaml:"auto_approve_run_tests"`  // run_tests
 }
 
 func Load(path string) (*Config, error) {

@@ -27,6 +27,8 @@ func (s *Session) autoApprove(toolName string, rawInput json.RawMessage) bool {
 		return p.AutoApproveFileOps
 	case "web_search":
 		return p.AutoApproveWebSearch
+	case "run_tests":
+		return p.AutoApproveRunTests
 	case "git":
 		var m map[string]any
 		if err := json.Unmarshal(rawInput, &m); err != nil {
@@ -138,6 +140,12 @@ func formatPermDesc(toolName string, rawInput json.RawMessage) string {
 		src, _ := m["source"].(string)
 		dst, _ := m["destination"].(string)
 		return fmt.Sprintf("%s → %s", src, dst)
+	case "run_tests":
+		pattern, _ := m["pattern"].(string)
+		if pattern != "" {
+			return fmt.Sprintf("pattern=%q", pattern)
+		}
+		return "full suite"
 	case "git":
 		sub, _ := m["subcommand"].(string)
 		args, _ := m["args"].(string)
