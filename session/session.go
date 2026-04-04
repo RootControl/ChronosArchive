@@ -93,6 +93,10 @@ type Session struct {
 	// pauseCh is nil when running; set to a new channel by Pause() and closed
 	// by Resume(). The run loop selects on it at each turn boundary.
 	pauseCh chan struct{}
+
+	// Cumulative token usage across all turns.
+	inputTokens  int64
+	outputTokens int64
 }
 
 // New creates a Session. Call Run() in a goroutine to start the agent loop.
@@ -160,6 +164,21 @@ func (s *Session) setTurn(t int) {
 func (s *Session) setErr(err error) {
 	s.mu.Lock()
 	s.err = err
+	s.mu.Unlock()
+}
+
+// TokenUsage returns the cumulative token counts across all turns.
+func (s *Session) TokenUsage() (inputTokens, outputTokens int64) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.inputTokens, s.outputTokens
+}
+
+// addTokens accumulates usage from one API response.
+func (s *Session) addTokens(input, output int64) {
+	s.mu.Lock()
+	s.inputTokens += input
+	s.outputTokens += output
 	s.mu.Unlock()
 }
 

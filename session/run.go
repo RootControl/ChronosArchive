@@ -147,6 +147,9 @@ func (s *Session) Run(ctx context.Context, client *anthropic.Client, tuiSend fun
 			return
 		}
 
+		// Track cumulative token usage.
+		s.addTokens(int64(accumulated.Usage.InputTokens), int64(accumulated.Usage.OutputTokens))
+
 		// Append the assistant message to history.
 		messages = append(messages, accumulated.ToParam())
 

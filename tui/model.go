@@ -725,6 +725,13 @@ func (m Model) renderDetail() string {
 	if sv.err != nil {
 		heading += "  " + styleRed.Render(sv.err.Error())
 	}
+	if s, ok := m.sessions[sid]; ok {
+		in, out := s.TokenUsage()
+		if in+out > 0 {
+			cost := estimateCost(s.Config.Model, in, out)
+			heading += "  " + styleGray.Render(fmt.Sprintf("%dk tok  $%.4f", (in+out)/1000, cost))
+		}
+	}
 	switch sv.state {
 	case session.StateRunning:
 		heading += "  " + styleGray.Render("[p] pause")
