@@ -28,6 +28,15 @@ type SessionConfig struct {
 	Batch           bool            `yaml:"batch"`           // submit via Anthropic Message Batches API (50% cost, async, single-turn)
 	ContextWindow   int             `yaml:"context_window"`  // keep first + last N messages when history exceeds 2×N (0 = disabled)
 	DependsOn       []string        `yaml:"depends_on"`      // session names that must complete (StateDone) before this one starts
+	GitHub          GitHubConfig    `yaml:"github"`          // optional: auto-create a PR on completion
+}
+
+// GitHubConfig controls auto-PR creation after a session completes.
+type GitHubConfig struct {
+	CreatePR    bool   `yaml:"create_pr"`    // if true, run gh pr create on StateDone
+	BaseBranch  string `yaml:"base_branch"`  // target branch (default: main)
+	TitlePrefix string `yaml:"title_prefix"` // prepended to auto-generated PR title
+	Draft       bool   `yaml:"draft"`        // open as draft PR
 }
 
 type ToolPermissions struct {

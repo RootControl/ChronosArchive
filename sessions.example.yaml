@@ -19,6 +19,11 @@ sessions:
     max_turns: 50                     # optional safety cap (default: 50)
     context_window: 0                 # sliding-window compression: keep first + last N messages (0 = off)
     # depends_on: []                  # session names that must complete before this one starts (pipeline mode)
+    # github:
+    #   create_pr: false              # run gh pr create when session completes with StateDone
+    #   base_branch: main             # PR target branch (default: main)
+    #   title_prefix: "feat: "        # prepended to auto-generated PR title
+    #   draft: false                  # open as draft PR
 
   # Session group example: run the same goal across multiple projects.
   # Each project_path becomes its own session named "<name>-1", "<name>-2", etc.

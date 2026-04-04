@@ -163,6 +163,17 @@ func (s *Session) Run(ctx context.Context, client *anthropic.Client, tuiSend fun
 			entry := LogEntry{Kind: LogSystem, Text: "goal complete"}
 			s.appendLog(entry)
 			tuiSend(LogMsg{SessionID: s.ID, Entry: entry})
+			if s.Config.GitHub.CreatePR {
+				if prURL, prErr := createGitHubPR(s.Config); prErr != nil {
+					e := LogEntry{Kind: LogSystem, Text: fmt.Sprintf("gh pr create failed: %v", prErr)}
+					s.appendLog(e)
+					tuiSend(LogMsg{SessionID: s.ID, Entry: e})
+				} else {
+					e := LogEntry{Kind: LogSystem, Text: "PR created: " + prURL}
+					s.appendLog(e)
+					tuiSend(LogMsg{SessionID: s.ID, Entry: e})
+				}
+			}
 			tuiSend(DoneMsg{SessionID: s.ID})
 			return
 
