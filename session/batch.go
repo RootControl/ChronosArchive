@@ -110,7 +110,11 @@ func RunBatch(ctx context.Context, client *anthropic.Client, sessions []*Session
 		}
 
 		counts := status.RequestCounts
+		total := int(counts.Processing + counts.Succeeded + counts.Errored + counts.Canceled + counts.Expired)
+		pending := int(counts.Processing)
+		succeeded := int(counts.Succeeded)
 		for _, s := range sessions {
+			s.SetBatchProgress(total, succeeded, pending)
 			entry := LogEntry{
 				Kind: LogSystem,
 				Text: fmt.Sprintf("batch status: %s (processing:%d succeeded:%d errored:%d)",

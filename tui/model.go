@@ -715,7 +715,14 @@ func (m Model) renderSessionList() string {
 		}
 		turnStr := ""
 		if sv.state == session.StateRunning || sv.state == session.StateWaitingPermission {
-			turnStr = styleGray.Render(fmt.Sprintf(" t%d", sv.turn))
+			if s, ok := m.sessions[id]; ok {
+				total, succeeded, _ := s.BatchProgress()
+				if total > 0 {
+					turnStr = styleGray.Render(fmt.Sprintf(" %d/%d", succeeded, total))
+				} else {
+					turnStr = styleGray.Render(fmt.Sprintf(" t%d", sv.turn))
+				}
+			}
 		}
 
 		row := fmt.Sprintf(" %s %s%s", icon, name, turnStr)

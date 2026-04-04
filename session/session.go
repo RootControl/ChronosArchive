@@ -97,6 +97,11 @@ type Session struct {
 	// Cumulative token usage across all turns.
 	inputTokens  int64
 	outputTokens int64
+
+	// Batch progress counters (non-zero only for batch sessions).
+	batchTotal     int
+	batchSucceeded int
+	batchPending   int
 }
 
 // New creates a Session. Call Run() in a goroutine to start the agent loop.
@@ -165,6 +170,22 @@ func (s *Session) setErr(err error) {
 	s.mu.Lock()
 	s.err = err
 	s.mu.Unlock()
+}
+
+// SetBatchProgress records the latest batch status counts for TUI display.
+func (s *Session) SetBatchProgress(total, succeeded, pending int) {
+	s.mu.Lock()
+	s.batchTotal = total
+	s.batchSucceeded = succeeded
+	s.batchPending = pending
+	s.mu.Unlock()
+}
+
+// BatchProgress returns the current batch progress counters.
+func (s *Session) BatchProgress() (total, succeeded, pending int) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.batchTotal, s.batchSucceeded, s.batchPending
 }
 
 // TokenUsage returns the cumulative token counts across all turns.
