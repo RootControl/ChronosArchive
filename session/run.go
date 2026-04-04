@@ -14,17 +14,42 @@ func (s *Session) Run(ctx context.Context, client *anthropic.Client, tuiSend fun
 
 	s.setState(StateRunning)
 	tuiSend(StateMsg{SessionID: s.ID, NewState: StateRunning})
-	s.appendLog(LogEntry{Kind: LogSystem, Text: fmt.Sprintf("starting session for project: %s", s.Config.ProjectPath)})
-	tuiSend(LogMsg{SessionID: s.ID, Entry: s.logs[len(s.logs)-1]})
 
 	systemPrompt := buildSystemPrompt(s.Config.ProjectPath, s.Config.Goal)
 	toolDefs := buildToolDefinitions()
 
+	// Attempt to resume from a saved snapshot.
+	startTurn := 0
 	messages := []anthropic.MessageParam{
 		anthropic.NewUserMessage(anthropic.NewTextBlock(s.Config.Goal)),
 	}
 
-	for turn := 0; turn < s.Config.MaxTurns; turn++ {
+	snap, snapErr := loadSnapshot(s.Config)
+	if snapErr != nil {
+		entry := LogEntry{Kind: LogSystem, Text: fmt.Sprintf("snapshot load error (starting fresh): %v", snapErr)}
+		s.appendLog(entry)
+		tuiSend(LogMsg{SessionID: s.ID, Entry: entry})
+	} else if snap != nil {
+		messages = snap.Messages
+		startTurn = snap.Turn
+		s.mu.Lock()
+		s.startedAt = snap.StartedAt
+		s.mu.Unlock()
+		// Replay saved logs into the session buffer and TUI.
+		for _, e := range snap.Logs {
+			s.appendLog(e)
+			tuiSend(LogMsg{SessionID: s.ID, Entry: e})
+		}
+		entry := LogEntry{Kind: LogSystem, Text: fmt.Sprintf("resumed from snapshot (turn %d)", startTurn)}
+		s.appendLog(entry)
+		tuiSend(LogMsg{SessionID: s.ID, Entry: entry})
+	} else {
+		entry := LogEntry{Kind: LogSystem, Text: fmt.Sprintf("starting session for project: %s", s.Config.ProjectPath)}
+		s.appendLog(entry)
+		tuiSend(LogMsg{SessionID: s.ID, Entry: entry})
+	}
+
+	for turn := startTurn; turn < s.Config.MaxTurns; turn++ {
 		s.setTurn(turn + 1)
 
 		// Check for cancellation before each API call.
@@ -103,6 +128,7 @@ func (s *Session) Run(ctx context.Context, client *anthropic.Client, tuiSend fun
 		switch accumulated.StopReason {
 		case anthropic.StopReasonEndTurn:
 			s.setState(StateDone)
+			s.deleteSnapshot()
 			entry := LogEntry{Kind: LogSystem, Text: "goal complete"}
 			s.appendLog(entry)
 			tuiSend(LogMsg{SessionID: s.ID, Entry: entry})
@@ -162,10 +188,18 @@ func (s *Session) Run(ctx context.Context, client *anthropic.Client, tuiSend fun
 
 			messages = append(messages, anthropic.NewUserMessage(toolResults...))
 
+			// Persist state after each complete tool turn so we can resume on restart.
+			if err := s.saveSnapshot(messages); err != nil {
+				entry := LogEntry{Kind: LogSystem, Text: fmt.Sprintf("snapshot save error: %v", err)}
+				s.appendLog(entry)
+				tuiSend(LogMsg{SessionID: s.ID, Entry: entry})
+			}
+
 		default:
 			// max_tokens, stop_sequence, refusal, pause_turn, etc.
 			reason := string(accumulated.StopReason)
 			s.setState(StateDone)
+			s.deleteSnapshot()
 			entry := LogEntry{Kind: LogSystem, Text: fmt.Sprintf("stopped: %s", reason)}
 			s.appendLog(entry)
 			tuiSend(LogMsg{SessionID: s.ID, Entry: entry})
@@ -176,6 +210,7 @@ func (s *Session) Run(ctx context.Context, client *anthropic.Client, tuiSend fun
 
 	// Max turns reached.
 	s.setState(StateDone)
+	s.deleteSnapshot()
 	entry := LogEntry{Kind: LogSystem, Text: fmt.Sprintf("max turns (%d) reached", s.Config.MaxTurns)}
 	s.appendLog(entry)
 	tuiSend(LogMsg{SessionID: s.ID, Entry: entry})
