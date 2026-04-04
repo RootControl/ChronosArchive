@@ -90,6 +90,10 @@ type Model struct {
 	// Brief status flash shown in the status bar (e.g. "saved template X").
 	statusMsg    string
 	statusMsgTTL int // decrements on each TickMsg; message clears at 0
+
+	// Log search state.
+	logSearching bool
+	logSearch    string
 }
 
 // NewModel builds the initial Model from a set of sessions.
@@ -294,6 +298,26 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			break
 		}
 
+		// Log search mode: capture input before the global key switch.
+		if m.logSearching {
+			switch msg.String() {
+			case "esc", "enter":
+				m.logSearching = false
+				m.refreshLogViewport()
+			case "backspace":
+				if len(m.logSearch) > 0 {
+					m.logSearch = m.logSearch[:len(m.logSearch)-1]
+					m.refreshLogViewport()
+				}
+			default:
+				if ch := msg.String(); len(ch) == 1 {
+					m.logSearch += ch
+					m.refreshLogViewport()
+				}
+			}
+			break
+		}
+
 		switch msg.String() {
 		case "q", "ctrl+c":
 			return m, tea.Quit
@@ -316,15 +340,25 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.templates, _ = config.LoadTemplates()
 			}
 
+		case "/":
+			m.logSearching = true
+			m.logSearch = ""
+			m.focus = panelDetail
+			m.refreshLogViewport()
+
 		case "up", "k":
 			if m.selectedIdx > 0 {
 				m.selectedIdx--
+				m.logSearching = false
+				m.logSearch = ""
 				m.refreshLogViewport()
 			}
 
 		case "down", "j":
 			if m.selectedIdx < len(m.order)-1 {
 				m.selectedIdx++
+				m.logSearching = false
+				m.logSearch = ""
 				m.refreshLogViewport()
 			}
 
@@ -640,7 +674,7 @@ func (m *Model) resetForm() {
 
 func (m Model) renderHeader() string {
 	title := styleBold.Render("ChronosArchive")
-	help := styleGray.Render("[↑↓/jk] nav  [tab] panel  [y/n] approve  [a] add  [p] pause  [r] retry  [e] export  [T] template  [q] quit")
+	help := styleGray.Render("[↑↓/jk] nav  [tab] panel  [y/n] approve  [a] add  [p] pause  [r] retry  [/] search  [e] export  [T] template  [q] quit")
 	space := strings.Repeat(" ", max(0, m.width-lipgloss.Width(title)-lipgloss.Width(help)-2))
 	return styleHeader.Width(m.width).Render(title + space + help)
 }
@@ -746,6 +780,13 @@ func (m Model) renderDetail() string {
 		parts = append(parts, m.renderPermPrompt(req))
 	}
 
+	if m.logSearching {
+		cursor := styleBlue.Render("█")
+		parts = append(parts, styleGray.Render("search: ")+styleGreen.Render(m.logSearch)+cursor+styleGray.Render("  [esc] clear"))
+	} else if m.logSearch != "" {
+		parts = append(parts, styleGray.Render("filter: ")+styleGreen.Render(m.logSearch)+styleGray.Render("  [/] edit  [↑↓] nav clears"))
+	}
+
 	parts = append(parts, m.logViewport.View())
 	return strings.Join(parts, "\n")
 }
@@ -781,12 +822,19 @@ func (m *Model) refreshLogViewport() {
 	}
 	sv := m.views[sid]
 	var sb strings.Builder
+	filter := strings.ToLower(m.logSearch)
 	for _, e := range sv.logs {
-		sb.WriteString(formatLogEntry(e))
+		line := formatLogEntry(e)
+		if filter != "" && !strings.Contains(strings.ToLower(e.Text), filter) {
+			continue
+		}
+		sb.WriteString(line)
 		sb.WriteString("\n")
 	}
 	m.logViewport.SetContent(sb.String())
-	m.logViewport.GotoBottom()
+	if filter == "" {
+		m.logViewport.GotoBottom()
+	}
 }
 
 func formatLogEntry(e session.LogEntry) string {
