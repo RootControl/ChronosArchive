@@ -62,6 +62,9 @@ type Model struct {
 	// Called when the user submits the add-session form.
 	launch LaunchFunc
 
+	// Called when the user presses [r] on a failed/done session.
+	retry RetryFunc
+
 	// Add-session form overlay.
 	formOpen           bool
 	formField          int // 0=project 1=goal 2=name 3=model 4=reads 5=bash 6=writes 7=web 8=http 9=fileops 10=thinking 11=thinkingBudget
@@ -123,6 +126,11 @@ func (m *Model) SetProgram(p *tea.Program) {
 // SetLaunch provides the callback used when the user submits the add-session form.
 func (m *Model) SetLaunch(fn LaunchFunc) {
 	m.launch = fn
+}
+
+// SetRetry provides the callback used when the user retries a failed/done session.
+func (m *Model) SetRetry(fn RetryFunc) {
+	m.retry = fn
 }
 
 func (m Model) Init() tea.Cmd {
@@ -307,6 +315,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			}
 
+		case "r":
+			if sid := m.selectedSessionID(); sid != "" {
+				if sv := m.views[sid]; sv.state == session.StateFailed || sv.state == session.StateDone {
+					if s, ok := m.sessions[sid]; ok && m.retry != nil {
+						m.retry(s)
+					}
+				}
+			}
+
 		case "pgup":
 			m.logViewport.HalfViewUp()
 		case "pgdown":
@@ -367,6 +384,20 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.sessions[s.ID] = s
 		m.selectedIdx = len(m.order) - 1
+		m.refreshLogViewport()
+
+	case RetrySessionMsg:
+		s := msg.Session
+		// Replace the old session reference without changing list order.
+		m.sessions[s.ID] = s
+		if sv, ok := m.views[s.ID]; ok {
+			sv.state = session.StateStarting
+			sv.logs = nil
+			sv.turn = 0
+			sv.err = nil
+			sv.startedAt = s.StartedAt()
+		}
+		delete(m.pendingPerms, s.ID)
 		m.refreshLogViewport()
 
 	// --- TUI-internal messages ---
@@ -520,7 +551,7 @@ func (m *Model) resetForm() {
 
 func (m Model) renderHeader() string {
 	title := styleBold.Render("ChronosArchive")
-	help := styleGray.Render("[↑↓/jk] nav  [tab] panel  [y/n] approve  [a] add  [q] quit")
+	help := styleGray.Render("[↑↓/jk] nav  [tab] panel  [y/n] approve  [a] add  [r] retry  [q] quit")
 	space := strings.Repeat(" ", max(0, m.width-lipgloss.Width(title)-lipgloss.Width(help)-2))
 	return styleHeader.Width(m.width).Render(title + space + help)
 }
@@ -597,6 +628,9 @@ func (m Model) renderDetail() string {
 	heading := styleBold.Render(sv.name) + "  " + stateIcon(sv.state, m.spinner)
 	if sv.err != nil {
 		heading += "  " + styleRed.Render(sv.err.Error())
+	}
+	if sv.state == session.StateFailed || sv.state == session.StateDone {
+		heading += "  " + styleGray.Render("[r] retry")
 	}
 	parts = append(parts, heading, "")
 

@@ -13,9 +13,19 @@ type NewSessionMsg struct {
 	Session *session.Session
 }
 
+// RetrySessionMsg is sent to the TUI when an existing session is being retried.
+// The TUI replaces the old session in-place rather than appending a new row.
+type RetrySessionMsg struct {
+	Session *session.Session
+}
+
 // LaunchFunc is called by the TUI when the user submits the add-session form.
 // It must create the session, start its goroutine, and send a NewSessionMsg back.
 type LaunchFunc func(opts LaunchOpts)
+
+// RetryFunc is called by the TUI when the user presses [r] on a failed/done session.
+// It must create a new session with the same config and send a RetrySessionMsg back.
+type RetryFunc func(old *session.Session)
 
 // LaunchOpts carries all configurable fields from the add-session form.
 type LaunchOpts struct {

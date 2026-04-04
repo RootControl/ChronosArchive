@@ -141,6 +141,14 @@ func main() {
 	}
 	model.SetLaunch(launchSession)
 
+	model.SetRetry(func(old *session.Session) {
+		s := session.New(old.ID, old.Config)
+		prog.Send(tui.RetrySessionMsg{Session: s})
+		go s.Run(ctx, &client, func(msg any) {
+			prog.Send(msg)
+		})
+	})
+
 	// Separate sessions into batch vs interactive.
 	var batchSessions []*session.Session
 	var normalSessions []*session.Session
