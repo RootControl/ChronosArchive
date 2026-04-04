@@ -20,6 +20,19 @@ sessions:
     context_window: 0                 # sliding-window compression: keep first + last N messages (0 = off)
     # depends_on: []                  # session names that must complete before this one starts (pipeline mode)
 
+  # Session group example: run the same goal across multiple projects.
+  # Each project_path becomes its own session named "<name>-1", "<name>-2", etc.
+  # - name: "add-linting"
+  #   project_paths:
+  #     - "/path/to/project-a"
+  #     - "/path/to/project-b"
+  #     - "/path/to/project-c"
+  #   goal: "Add ESLint with the airbnb config and fix all warnings."
+  #   model: "claude-sonnet-4-6"
+  #   tool_permissions:
+  #     auto_approve_reads: true
+  #     auto_approve_writes: true
+
   - name: "docs-generator"
     project_path: "/path/to/another/project"
     goal: "Generate API documentation for all public Go functions."

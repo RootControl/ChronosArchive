@@ -18,6 +18,7 @@ type Config struct {
 type SessionConfig struct {
 	Name            string          `yaml:"name"`
 	ProjectPath     string          `yaml:"project_path"`
+	ProjectPaths    []string        `yaml:"project_paths"` // expanded into per-project sessions by Resolve()
 	Goal            string          `yaml:"goal"`
 	Model           string          `yaml:"model"`
 	ToolPermissions ToolPermissions `yaml:"tool_permissions"`
@@ -61,32 +62,49 @@ func Load(path string) (*Config, error) {
 }
 
 // Resolve validates and normalises all sessions in cfg (absolute paths, defaults).
+// Entries with project_paths are expanded into one session per path.
 func Resolve(cfg *Config) error {
-	for i := range cfg.Sessions {
-		s := &cfg.Sessions[i]
+	var expanded []SessionConfig
+	for i, s := range cfg.Sessions {
 		if s.Name == "" {
 			return fmt.Errorf("session %d has no name", i)
-		}
-		if s.ProjectPath == "" {
-			return fmt.Errorf("session %q has no project_path", s.Name)
 		}
 		if s.Goal == "" {
 			return fmt.Errorf("session %q has no goal", s.Name)
 		}
-		abs, err := filepath.Abs(s.ProjectPath)
-		if err != nil {
-			return fmt.Errorf("session %q: resolving project_path: %w", s.Name, err)
+
+		// Expand project_paths into individual sessions.
+		paths := s.ProjectPaths
+		if s.ProjectPath != "" {
+			paths = append([]string{s.ProjectPath}, paths...)
 		}
-		s.ProjectPath = abs
-		if s.Model == "" {
-			s.Model = DefaultModel
+		if len(paths) == 0 {
+			return fmt.Errorf("session %q has no project_path or project_paths", s.Name)
 		}
-		if s.MaxTurns <= 0 {
-			s.MaxTurns = DefaultMaxTurns
-		}
-		if s.Thinking && s.ThinkingBudget <= 0 {
-			s.ThinkingBudget = 10000
+
+		for j, p := range paths {
+			sc := s // copy
+			abs, err := filepath.Abs(p)
+			if err != nil {
+				return fmt.Errorf("session %q: resolving path %q: %w", s.Name, p, err)
+			}
+			sc.ProjectPath = abs
+			sc.ProjectPaths = nil
+			if len(paths) > 1 {
+				sc.Name = fmt.Sprintf("%s-%d", s.Name, j+1)
+			}
+			if sc.Model == "" {
+				sc.Model = DefaultModel
+			}
+			if sc.MaxTurns <= 0 {
+				sc.MaxTurns = DefaultMaxTurns
+			}
+			if sc.Thinking && sc.ThinkingBudget <= 0 {
+				sc.ThinkingBudget = 10000
+			}
+			expanded = append(expanded, sc)
 		}
 	}
+	cfg.Sessions = expanded
 	return nil
 }
