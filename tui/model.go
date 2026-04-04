@@ -351,6 +351,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			}
 
+		case "p":
+			if sid := m.selectedSessionID(); sid != "" {
+				if s, ok := m.sessions[sid]; ok {
+					switch m.views[sid].state {
+					case session.StateRunning:
+						s.Pause()
+					case session.StatePaused:
+						s.Resume()
+					}
+				}
+			}
+
 		case "r":
 			if sid := m.selectedSessionID(); sid != "" {
 				if sv := m.views[sid]; sv.state == session.StateFailed || sv.state == session.StateDone {
@@ -613,7 +625,7 @@ func (m *Model) resetForm() {
 
 func (m Model) renderHeader() string {
 	title := styleBold.Render("ChronosArchive")
-	help := styleGray.Render("[↑↓/jk] nav  [tab] panel  [y/n] approve  [a] add  [r] retry  [T] save template  [q] quit")
+	help := styleGray.Render("[↑↓/jk] nav  [tab] panel  [y/n] approve  [a] add  [p] pause  [r] retry  [T] save template  [q] quit")
 	space := strings.Repeat(" ", max(0, m.width-lipgloss.Width(title)-lipgloss.Width(help)-2))
 	return styleHeader.Width(m.width).Render(title + space + help)
 }
@@ -622,18 +634,20 @@ func (m Model) renderStatusBar() string {
 	if m.statusMsg != "" {
 		return styleStatusBar.Width(m.width).Render("  " + m.statusMsg)
 	}
-	running, waiting, done := 0, 0, 0
+	running, waiting, paused, done := 0, 0, 0, 0
 	for _, sv := range m.views {
 		switch sv.state {
 		case session.StateRunning:
 			running++
 		case session.StateWaitingPermission:
 			waiting++
+		case session.StatePaused:
+			paused++
 		case session.StateDone, session.StateFailed:
 			done++
 		}
 	}
-	txt := fmt.Sprintf("  %d running  %d waiting  %d done  (total: %d)", running, waiting, done, len(m.order))
+	txt := fmt.Sprintf("  %d running  %d waiting  %d paused  %d done  (total: %d)", running, waiting, paused, done, len(m.order))
 	return styleStatusBar.Width(m.width).Render(txt)
 }
 
@@ -674,6 +688,8 @@ func stateIcon(s session.State, sp spinner.Model) string {
 		return styleGreen.Render(sp.View())
 	case session.StateWaitingPermission:
 		return styleYellow.Render("⏳")
+	case session.StatePaused:
+		return styleYellow.Render("⏸")
 	case session.StateDone:
 		return styleGreen.Render("✓")
 	case session.StateFailed:
@@ -694,7 +710,12 @@ func (m Model) renderDetail() string {
 	if sv.err != nil {
 		heading += "  " + styleRed.Render(sv.err.Error())
 	}
-	if sv.state == session.StateFailed || sv.state == session.StateDone {
+	switch sv.state {
+	case session.StateRunning:
+		heading += "  " + styleGray.Render("[p] pause")
+	case session.StatePaused:
+		heading += "  " + styleGray.Render("[p] resume")
+	case session.StateFailed, session.StateDone:
 		heading += "  " + styleGray.Render("[r] retry")
 	}
 	parts = append(parts, heading, "")

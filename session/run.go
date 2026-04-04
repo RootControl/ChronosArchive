@@ -52,6 +52,31 @@ func (s *Session) Run(ctx context.Context, client *anthropic.Client, tuiSend fun
 	for turn := startTurn; turn < s.Config.MaxTurns; turn++ {
 		s.setTurn(turn + 1)
 
+		// Check for pause before each API call. Blocks until resumed or ctx cancelled.
+		s.mu.RLock()
+		ch := s.pauseCh
+		s.mu.RUnlock()
+		if ch != nil {
+			s.setState(StatePaused)
+			tuiSend(StateMsg{SessionID: s.ID, NewState: StatePaused})
+			entry := LogEntry{Kind: LogSystem, Text: "paused"}
+			s.appendLog(entry)
+			tuiSend(LogMsg{SessionID: s.ID, Entry: entry})
+			select {
+			case <-ch:
+				s.setState(StateRunning)
+				tuiSend(StateMsg{SessionID: s.ID, NewState: StateRunning})
+				entry := LogEntry{Kind: LogSystem, Text: "resumed"}
+				s.appendLog(entry)
+				tuiSend(LogMsg{SessionID: s.ID, Entry: entry})
+			case <-ctx.Done():
+				s.setErr(ctx.Err())
+				s.setState(StateFailed)
+				tuiSend(DoneMsg{SessionID: s.ID, Err: ctx.Err()})
+				return
+			}
+		}
+
 		// Check for cancellation before each API call.
 		select {
 		case <-ctx.Done():

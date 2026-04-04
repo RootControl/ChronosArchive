@@ -14,6 +14,7 @@ const (
 	StateStarting          State = iota
 	StateRunning
 	StateWaitingPermission
+	StatePaused
 	StateDone
 	StateFailed
 )
@@ -26,6 +27,8 @@ func (s State) String() string {
 		return "running"
 	case StateWaitingPermission:
 		return "waiting"
+	case StatePaused:
+		return "paused"
 	case StateDone:
 		return "done"
 	case StateFailed:
@@ -86,6 +89,10 @@ type Session struct {
 	turn      int
 	startedAt time.Time
 	err       error
+
+	// pauseCh is nil when running; set to a new channel by Pause() and closed
+	// by Resume(). The run loop selects on it at each turn boundary.
+	pauseCh chan struct{}
 }
 
 // New creates a Session. Call Run() in a goroutine to start the agent loop.
@@ -154,6 +161,26 @@ func (s *Session) setErr(err error) {
 	s.mu.Lock()
 	s.err = err
 	s.mu.Unlock()
+}
+
+// Pause signals the session goroutine to pause before its next API call.
+// No-op if the session is not running.
+func (s *Session) Pause() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.state == StateRunning && s.pauseCh == nil {
+		s.pauseCh = make(chan struct{})
+	}
+}
+
+// Resume unblocks a paused session. No-op if not paused.
+func (s *Session) Resume() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.pauseCh != nil {
+		close(s.pauseCh)
+		s.pauseCh = nil
+	}
 }
 
 func (s *Session) appendLog(e LogEntry) {
