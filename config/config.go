@@ -26,6 +26,7 @@ type SessionConfig struct {
 	ThinkingBudget  int             `yaml:"thinking_budget"` // tokens; default 10000 when thinking enabled
 	Batch           bool            `yaml:"batch"`           // submit via Anthropic Message Batches API (50% cost, async, single-turn)
 	ContextWindow   int             `yaml:"context_window"`  // keep first + last N messages when history exceeds 2×N (0 = disabled)
+	DependsOn       []string        `yaml:"depends_on"`      // session names that must complete (StateDone) before this one starts
 }
 
 type ToolPermissions struct {

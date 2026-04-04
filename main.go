@@ -160,11 +160,27 @@ func main() {
 		}
 	}
 
-	// Launch interactive sessions individually.
+	// Build a name→session map for dependency resolution.
+	sessionsByName := make(map[string]*session.Session, len(sessions))
+	for _, s := range sessions {
+		sessionsByName[s.Config.Name] = s
+	}
+
+	// Launch interactive sessions, waiting for declared dependencies first.
 	for _, s := range normalSessions {
-		go s.Run(ctx, &client, func(msg any) {
-			prog.Send(msg)
-		})
+		s := s // capture loop variable
+		deps := make([]*session.Session, 0, len(s.Config.DependsOn))
+		for _, name := range s.Config.DependsOn {
+			if dep, ok := sessionsByName[name]; ok {
+				deps = append(deps, dep)
+			}
+		}
+		go func() {
+			for _, dep := range deps {
+				<-dep.DoneCh // wait for dependency to finish
+			}
+			s.Run(ctx, &client, func(msg any) { prog.Send(msg) })
+		}()
 	}
 
 	// Launch all batch sessions as a single Anthropic Batch API request.
