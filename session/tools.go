@@ -118,6 +118,13 @@ func buildToolDefinitions() []anthropic.ToolUnionParam {
 			},
 			[]string{"query"},
 		),
+		mkTool("git", "Run a git subcommand inside the project directory. Allowed: status, log, diff, branch, show, blame, add, commit, checkout, switch, stash, restore, reset, merge, rebase, tag.",
+			map[string]any{
+				"subcommand": strProp("Git subcommand (e.g. status, log, diff, add, commit)"),
+				"args":       strProp("Additional arguments as a single string (e.g. '--oneline -10' or '-m \"message\"')"),
+			},
+			[]string{"subcommand"},
+		),
 	}
 }
 
@@ -150,6 +157,8 @@ func (s *Session) executeTool(toolName string, rawInput json.RawMessage) (string
 		return tools.DeleteFile(projectPath, rawInput)
 	case "web_search":
 		return tools.WebSearch(rawInput)
+	case "git":
+		return tools.Git(projectPath, rawInput)
 	default:
 		return "", fmt.Errorf("unknown tool: %s", toolName)
 	}

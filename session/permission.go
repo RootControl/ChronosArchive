@@ -4,11 +4,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+
+	"github.com/chronosarchive/chronosarchive/tools"
 )
 
 // autoApprove returns true if the tool call should be approved without asking
 // the user, based on the session's ToolPermissions config.
-func (s *Session) autoApprove(toolName string) bool {
+func (s *Session) autoApprove(toolName string, rawInput json.RawMessage) bool {
 	p := s.Config.ToolPermissions
 	switch toolName {
 	case "read_file", "list_directory", "grep":
@@ -25,6 +27,16 @@ func (s *Session) autoApprove(toolName string) bool {
 		return p.AutoApproveFileOps
 	case "web_search":
 		return p.AutoApproveWebSearch
+	case "git":
+		var m map[string]any
+		if err := json.Unmarshal(rawInput, &m); err != nil {
+			return false
+		}
+		sub, _ := m["subcommand"].(string)
+		if tools.GitIsReadSubcommand(sub) {
+			return p.AutoApproveGitReads
+		}
+		return p.AutoApproveGitWrites
 	}
 	return false
 }
@@ -35,7 +47,7 @@ func (s *Session) autoApprove(toolName string) bool {
 //
 // tuiSend must be tea.Program.Send — it is safe to call from any goroutine.
 func (s *Session) checkPermission(toolName string, rawInput json.RawMessage, tuiSend func(any)) (bool, error) {
-	if s.autoApprove(toolName) {
+	if s.autoApprove(toolName, rawInput) {
 		s.appendLog(LogEntry{
 			Kind: LogPermission,
 			Text: fmt.Sprintf("auto-approved %s", toolName),
@@ -126,6 +138,13 @@ func formatPermDesc(toolName string, rawInput json.RawMessage) string {
 		src, _ := m["source"].(string)
 		dst, _ := m["destination"].(string)
 		return fmt.Sprintf("%s → %s", src, dst)
+	case "git":
+		sub, _ := m["subcommand"].(string)
+		args, _ := m["args"].(string)
+		if args != "" {
+			return fmt.Sprintf("git %s %s", sub, args)
+		}
+		return "git " + sub
 	case "delete_file":
 		path, _ := m["path"].(string)
 		recursive, _ := m["recursive"].(bool)

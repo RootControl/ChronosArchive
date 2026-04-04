@@ -35,6 +35,8 @@ type ToolPermissions struct {
 	AutoApproveHTTP      bool `yaml:"auto_approve_http"`
 	AutoApproveFileOps   bool `yaml:"auto_approve_file_ops"` // create_directory, move_file, delete_file
 	AutoApproveWebSearch bool `yaml:"auto_approve_web_search"` // web_search
+	AutoApproveGitReads  bool `yaml:"auto_approve_git_reads"`  // git status/log/diff/branch/show/blame
+	AutoApproveGitWrites bool `yaml:"auto_approve_git_writes"` // git add/commit/checkout/…
 }
 
 func Load(path string) (*Config, error) {
