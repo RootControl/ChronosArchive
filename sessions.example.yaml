@@ -12,6 +12,7 @@ sessions:
       auto_approve_web_fetch: false   # web fetch requests always require approval
       auto_approve_http: false        # http tool always requires approval
       auto_approve_file_ops: false    # create_directory, move_file, delete_file always require approval
+      auto_approve_web_search: false  # web_search always requires approval
     max_turns: 50                     # optional safety cap (default: 50)
 
   - name: "docs-generator"

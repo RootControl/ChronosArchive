@@ -34,6 +34,7 @@ type ToolPermissions struct {
 	AutoApproveWebFetch  bool `yaml:"auto_approve_web_fetch"`
 	AutoApproveHTTP      bool `yaml:"auto_approve_http"`
 	AutoApproveFileOps   bool `yaml:"auto_approve_file_ops"` // create_directory, move_file, delete_file
+	AutoApproveWebSearch bool `yaml:"auto_approve_web_search"` // web_search
 }
 
 func Load(path string) (*Config, error) {

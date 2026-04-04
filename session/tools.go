@@ -111,6 +111,13 @@ func buildToolDefinitions() []anthropic.ToolUnionParam {
 			},
 			[]string{"path"},
 		),
+		mkTool("web_search", "Search the web using DuckDuckGo and return a summary of results.",
+			map[string]any{
+				"query":       strProp("Search query"),
+				"max_results": intProp("Maximum number of results to return (default 5)"),
+			},
+			[]string{"query"},
+		),
 	}
 }
 
@@ -141,6 +148,8 @@ func (s *Session) executeTool(toolName string, rawInput json.RawMessage) (string
 		return tools.MoveFile(projectPath, rawInput)
 	case "delete_file":
 		return tools.DeleteFile(projectPath, rawInput)
+	case "web_search":
+		return tools.WebSearch(rawInput)
 	default:
 		return "", fmt.Errorf("unknown tool: %s", toolName)
 	}

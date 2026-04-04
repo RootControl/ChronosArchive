@@ -23,6 +23,8 @@ func (s *Session) autoApprove(toolName string) bool {
 		return p.AutoApproveHTTP
 	case "create_directory", "move_file", "delete_file":
 		return p.AutoApproveFileOps
+	case "web_search":
+		return p.AutoApproveWebSearch
 	}
 	return false
 }
@@ -107,6 +109,9 @@ func formatPermDesc(toolName string, rawInput json.RawMessage) string {
 			path = "."
 		}
 		return fmt.Sprintf("pattern=%q in %s", pattern, path)
+	case "web_search":
+		query, _ := m["query"].(string)
+		return query
 	case "web_fetch":
 		url, _ := m["url"].(string)
 		return url
