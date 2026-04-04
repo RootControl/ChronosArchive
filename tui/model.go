@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -796,8 +797,60 @@ func (m Model) renderPermPrompt(req session.PermissionMsg) string {
 	tool := "Tool:   " + styleToolName.Render(req.ToolName)
 	detail := "Action: " + req.Description
 	keys := styleGreen.Render("[y] Approve") + "  " + styleRed.Render("[n] Deny")
-	content := strings.Join([]string{title, tool, detail, "", keys}, "\n")
-	return stylePermBox.Render(content)
+	lines := []string{title, tool, detail}
+	if preview := permPreview(req.ToolName, req.RawInput); preview != "" {
+		lines = append(lines, "", preview)
+	}
+	lines = append(lines, "", keys)
+	return stylePermBox.Render(strings.Join(lines, "\n"))
+}
+
+// permPreview returns a short content preview for write/edit tool calls.
+func permPreview(toolName string, rawInput []byte) string {
+	var m map[string]any
+	if err := json.Unmarshal(rawInput, &m); err != nil {
+		return ""
+	}
+	const maxLines = 8
+	switch toolName {
+	case "edit_file":
+		old, _ := m["old_string"].(string)
+		new, _ := m["new_string"].(string)
+		if old == "" && new == "" {
+			return ""
+		}
+		var sb strings.Builder
+		for _, line := range splitHead(old, maxLines) {
+			sb.WriteString(styleRed.Render("- " + line) + "\n")
+		}
+		for _, line := range splitHead(new, maxLines) {
+			sb.WriteString(styleGreen.Render("+ " + line) + "\n")
+		}
+		return strings.TrimRight(sb.String(), "\n")
+	case "write_file":
+		content, _ := m["content"].(string)
+		if content == "" {
+			return ""
+		}
+		var sb strings.Builder
+		for _, line := range splitHead(content, maxLines) {
+			sb.WriteString(styleGray.Render("  " + line) + "\n")
+		}
+		lines := strings.Count(content, "\n") + 1
+		if lines > maxLines {
+			sb.WriteString(styleGray.Render(fmt.Sprintf("  … (%d more lines)", lines-maxLines)))
+		}
+		return strings.TrimRight(sb.String(), "\n")
+	}
+	return ""
+}
+
+func splitHead(s string, n int) []string {
+	lines := strings.Split(s, "\n")
+	if len(lines) > n {
+		return lines[:n]
+	}
+	return lines
 }
 
 func (m *Model) resizeViewport() {
