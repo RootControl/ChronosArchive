@@ -17,6 +17,7 @@ sessions:
       auto_approve_git_writes: false  # git add/commit/checkout/… always requires approval
       auto_approve_run_tests: false   # run_tests always requires approval
     max_turns: 50                     # optional safety cap (default: 50)
+    context_window: 0                 # sliding-window compression: keep first + last N messages (0 = off)
 
   - name: "docs-generator"
     project_path: "/path/to/another/project"

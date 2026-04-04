@@ -87,6 +87,9 @@ func (s *Session) Run(ctx context.Context, client *anthropic.Client, tuiSend fun
 		default:
 		}
 
+		// Apply sliding-window context compression if configured.
+		messages = compressContext(messages, s.Config.ContextWindow)
+
 		// Build API params.
 		params := anthropic.MessageNewParams{
 			Model:     anthropic.Model(s.Config.Model),
