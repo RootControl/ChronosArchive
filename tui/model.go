@@ -9,6 +9,7 @@ import (
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/chronosarchive/chronosarchive/config"
 	"github.com/chronosarchive/chronosarchive/session"
 )
 
@@ -80,6 +81,15 @@ type Model struct {
 	formApproveFileOps bool
 	formThinking       bool
 	formThinkingBudget string
+	formTemplateName   string // name of the template currently loaded into the form
+
+	// Template cycling state (populated when form opens).
+	templates   []config.Template
+	templateIdx int
+
+	// Brief status flash shown in the status bar (e.g. "saved template X").
+	statusMsg    string
+	statusMsgTTL int // decrements on each TickMsg; message clears at 0
 }
 
 // NewModel builds the initial Model from a set of sessions.
@@ -215,6 +225,29 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.formThinking = !m.formThinking
 				}
 
+			case "ctrl+t":
+				if len(m.templates) > 0 {
+					m.templateIdx = (m.templateIdx + 1) % len(m.templates)
+					t := m.templates[m.templateIdx]
+					m.formTemplateName = t.Name
+					if t.Goal != "" {
+						m.formGoal = t.Goal
+					}
+					if t.Model != "" {
+						m.formModel = t.Model
+					}
+					m.formApproveReads = t.ToolPermissions.AutoApproveReads
+					m.formApproveBash = t.ToolPermissions.AutoApproveBash
+					m.formApproveWrites = t.ToolPermissions.AutoApproveWrites
+					m.formApproveWeb = t.ToolPermissions.AutoApproveWebFetch
+					m.formApproveHTTP = t.ToolPermissions.AutoApproveHTTP
+					m.formApproveFileOps = t.ToolPermissions.AutoApproveFileOps
+					m.formThinking = t.Thinking
+					if t.ThinkingBudget > 0 {
+						m.formThinkingBudget = fmt.Sprintf("%d", t.ThinkingBudget)
+					}
+				}
+
 			case "backspace":
 				switch m.formField {
 				case 0:
@@ -278,6 +311,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.formApproveFileOps = false
 				m.formThinking = false
 				m.formThinkingBudget = ""
+				m.formTemplateName = ""
+				m.templateIdx = -1
+				m.templates, _ = config.LoadTemplates()
 			}
 
 		case "up", "k":
@@ -321,6 +357,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					if s, ok := m.sessions[sid]; ok && m.retry != nil {
 						m.retry(s)
 					}
+				}
+			}
+
+		case "T":
+			if sid := m.selectedSessionID(); sid != "" {
+				if s, ok := m.sessions[sid]; ok {
+					tmpl := config.TemplateFromSession(s.Config)
+					if err := config.SaveTemplate(tmpl); err != nil {
+						m.statusMsg = "template save failed: " + err.Error()
+					} else {
+						m.statusMsg = fmt.Sprintf("saved template %q", tmpl.Name)
+					}
+					m.statusMsgTTL = 6 // ~3 s at 500 ms tick
 				}
 			}
 
@@ -408,6 +457,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmds = append(cmds, cmd)
 
 	case TickMsg:
+		if m.statusMsgTTL > 0 {
+			m.statusMsgTTL--
+			if m.statusMsgTTL == 0 {
+				m.statusMsg = ""
+			}
+		}
 		cmds = append(cmds, tickCmd())
 
 	default:
@@ -489,7 +544,13 @@ func (m Model) renderForm() string {
 		return indicator
 	}
 
-	title := styleBold.Render("Add Session") + "  " + styleGray.Render("[tab] next  [space] toggle  [enter] launch  [esc] cancel")
+	templateHint := styleGray.Render("[ctrl+t] load template")
+	if m.formTemplateName != "" {
+		templateHint = styleGray.Render("template: ") + styleGreen.Render(m.formTemplateName) + styleGray.Render("  [ctrl+t] next")
+	} else if len(m.templates) == 0 {
+		templateHint = styleGray.Render("(no saved templates)")
+	}
+	title := styleBold.Render("Add Session") + "  " + styleGray.Render("[tab] next  [space] toggle  [enter] launch  [esc] cancel") + "  " + templateHint
 
 	thinkingBudget := m.formThinkingBudget
 	if thinkingBudget == "" {
@@ -547,16 +608,20 @@ func (m *Model) resetForm() {
 	m.formApproveFileOps = false
 	m.formThinking = false
 	m.formThinkingBudget = ""
+	m.formTemplateName = ""
 }
 
 func (m Model) renderHeader() string {
 	title := styleBold.Render("ChronosArchive")
-	help := styleGray.Render("[↑↓/jk] nav  [tab] panel  [y/n] approve  [a] add  [r] retry  [q] quit")
+	help := styleGray.Render("[↑↓/jk] nav  [tab] panel  [y/n] approve  [a] add  [r] retry  [T] save template  [q] quit")
 	space := strings.Repeat(" ", max(0, m.width-lipgloss.Width(title)-lipgloss.Width(help)-2))
 	return styleHeader.Width(m.width).Render(title + space + help)
 }
 
 func (m Model) renderStatusBar() string {
+	if m.statusMsg != "" {
+		return styleStatusBar.Width(m.width).Render("  " + m.statusMsg)
+	}
 	running, waiting, done := 0, 0, 0
 	for _, sv := range m.views {
 		switch sv.state {
