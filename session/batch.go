@@ -170,7 +170,7 @@ func (s *Session) runBatchAgentLoop(ctx context.Context, client *anthropic.Clien
 	toolDefs := buildToolDefinitions()
 	currentResponse := lastResponse
 
-	for turn := startTurn; turn < s.Config.MaxTurns; turn++ {
+	for turn := startTurn; s.Config.MaxTurns == 0 || turn < s.Config.MaxTurns; turn++ {
 		s.setTurn(turn + 1)
 
 		// Check for pause.

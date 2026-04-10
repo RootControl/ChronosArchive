@@ -105,9 +105,10 @@ func Resolve(cfg *Config) error {
 			if sc.Model == "" {
 				sc.Model = DefaultModel
 			}
-			if sc.MaxTurns <= 0 {
+			if sc.MaxTurns < 0 {
 				sc.MaxTurns = DefaultMaxTurns
 			}
+			// MaxTurns == 0 means unlimited turns.
 			if sc.Thinking && sc.ThinkingBudget <= 0 {
 				sc.ThinkingBudget = 10000
 			}

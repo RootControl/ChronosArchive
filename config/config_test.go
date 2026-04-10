@@ -24,8 +24,21 @@ func TestResolve_Defaults(t *testing.T) {
 	if s.Model != DefaultModel {
 		t.Errorf("model: got %q, want %q", s.Model, DefaultModel)
 	}
-	if s.MaxTurns != DefaultMaxTurns {
-		t.Errorf("max_turns: got %d, want %d", s.MaxTurns, DefaultMaxTurns)
+	// MaxTurns == 0 (unset) means unlimited — default is NOT applied.
+	if s.MaxTurns != 0 {
+		t.Errorf("max_turns: got %d, want 0 (unlimited)", s.MaxTurns)
+	}
+}
+
+func TestResolve_NegativeMaxTurnsGetsDefault(t *testing.T) {
+	dir := t.TempDir()
+	cfg := validConfig(dir)
+	cfg.Sessions[0].MaxTurns = -1
+	if err := Resolve(cfg); err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Sessions[0].MaxTurns != DefaultMaxTurns {
+		t.Errorf("max_turns: got %d, want %d", cfg.Sessions[0].MaxTurns, DefaultMaxTurns)
 	}
 }
 

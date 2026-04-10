@@ -49,7 +49,7 @@ func (s *Session) Run(ctx context.Context, client *anthropic.Client, tuiSend fun
 		tuiSend(LogMsg{SessionID: s.ID, Entry: entry})
 	}
 
-	for turn := startTurn; turn < s.Config.MaxTurns; turn++ {
+	for turn := startTurn; s.Config.MaxTurns == 0 || turn < s.Config.MaxTurns; turn++ {
 		s.setTurn(turn + 1)
 
 		// Check for pause before each API call. Blocks until resumed or ctx cancelled.
