@@ -2,7 +2,11 @@ package session
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"math/rand"
+	"net"
+	"time"
 
 	anthropic "github.com/anthropics/anthropic-sdk-go"
 )
@@ -109,44 +113,77 @@ func (s *Session) Run(ctx context.Context, client *anthropic.Client, tuiSend fun
 			params.Thinking = anthropic.ThinkingConfigParamOfEnabled(budget)
 		}
 
-		// Call the API with streaming.
-		stream := client.Messages.NewStreaming(ctx, params)
-
-		// Accumulate the full message while forwarding text deltas to the TUI.
-		var accumulated anthropic.Message
-		for stream.Next() {
-			event := stream.Current()
-			if err := accumulated.Accumulate(event); err != nil {
-				// Log but continue — partial accumulation is recoverable.
-				s.appendLog(LogEntry{Kind: LogSystem, Text: fmt.Sprintf("accumulate warning: %v", err)})
+		// Call the API with streaming, retrying on transient errors.
+		var (
+			accumulated anthropic.Message
+			streamErr   error
+		)
+		maxRetries := s.Config.MaxRetries
+		if maxRetries < 0 {
+			maxRetries = 0
+		}
+		for attempt := 0; attempt <= maxRetries; attempt++ {
+			if attempt > 0 {
+				wait := retryBackoff(attempt-1, s.Config.RetryBaseMs)
+				entry := LogEntry{Kind: LogSystem, Text: fmt.Sprintf(
+					"API error (attempt %d/%d), retrying in %s…", attempt, maxRetries, wait.Round(time.Millisecond),
+				)}
+				s.appendLog(entry)
+				tuiSend(LogMsg{SessionID: s.ID, Entry: entry})
+				select {
+				case <-time.After(wait):
+				case <-ctx.Done():
+					s.setErr(ctx.Err())
+					s.setState(StateFailed)
+					tuiSend(DoneMsg{SessionID: s.ID, Err: ctx.Err()})
+					return
+				}
 			}
-			// Forward text deltas in real time.
-			if event.Type == "content_block_delta" {
-				cbDelta := event.AsContentBlockDelta()
-				if cbDelta.Delta.Type == "text_delta" {
-					text := cbDelta.Delta.Text
-					if text != "" {
-						entry := LogEntry{Kind: LogText, Text: text}
-						s.appendLog(entry)
-						tuiSend(LogMsg{SessionID: s.ID, Entry: entry})
+
+			stream := client.Messages.NewStreaming(ctx, params)
+			accumulated = anthropic.Message{}
+			streamErr = nil
+
+			for stream.Next() {
+				event := stream.Current()
+				if err := accumulated.Accumulate(event); err != nil {
+					// Log but continue — partial accumulation is recoverable.
+					s.appendLog(LogEntry{Kind: LogSystem, Text: fmt.Sprintf("accumulate warning: %v", err)})
+				}
+				// Forward text deltas in real time.
+				if event.Type == "content_block_delta" {
+					cbDelta := event.AsContentBlockDelta()
+					if cbDelta.Delta.Type == "text_delta" {
+						if text := cbDelta.Delta.Text; text != "" {
+							entry := LogEntry{Kind: LogText, Text: text}
+							s.appendLog(entry)
+							tuiSend(LogMsg{SessionID: s.ID, Entry: entry})
+						}
 					}
 				}
 			}
-		}
-		if err := stream.Err(); err != nil {
-			// Ignore context cancellation — it will be caught at the top of the next loop.
+			streamErr = stream.Err()
+
+			if streamErr == nil {
+				break
+			}
 			if ctx.Err() != nil {
 				s.setErr(ctx.Err())
 				s.setState(StateFailed)
 				tuiSend(DoneMsg{SessionID: s.ID, Err: ctx.Err()})
 				return
 			}
-			s.setErr(err)
+			if !isRetryable(streamErr) {
+				break
+			}
+		}
+		if streamErr != nil {
+			s.setErr(streamErr)
 			s.setState(StateFailed)
-			entry := LogEntry{Kind: LogSystem, Text: fmt.Sprintf("API error: %v", err)}
+			entry := LogEntry{Kind: LogSystem, Text: fmt.Sprintf("API error: %v", streamErr)}
 			s.appendLog(entry)
 			tuiSend(LogMsg{SessionID: s.ID, Entry: entry})
-			tuiSend(DoneMsg{SessionID: s.ID, Err: err})
+			tuiSend(DoneMsg{SessionID: s.ID, Err: streamErr})
 			return
 		}
 
@@ -192,6 +229,34 @@ func (s *Session) Run(ctx context.Context, client *anthropic.Client, tuiSend fun
 				entry := LogEntry{Kind: LogToolCall, ToolName: toolUse.Name, Text: permDesc}
 				s.appendLog(entry)
 				tuiSend(LogMsg{SessionID: s.ID, Entry: entry})
+
+				// Spin detection: auto-pause when the same tool+input repeats consecutively.
+				if s.Config.SpinThreshold > 0 {
+					inputStr := string(toolUse.Input)
+					if toolUse.Name == s.lastToolName && inputStr == s.lastToolInput {
+						s.consecutiveCount++
+					} else {
+						s.consecutiveCount = 1
+						s.lastToolName = toolUse.Name
+						s.lastToolInput = inputStr
+					}
+					if s.consecutiveCount >= s.Config.SpinThreshold {
+						s.consecutiveCount = 0
+						s.lastToolName = ""
+						s.lastToolInput = ""
+						s.Pause()
+						spinEntry := LogEntry{Kind: LogSystem, Text: fmt.Sprintf(
+							"spin detected: %s called with identical input %d consecutive times — session paused",
+							toolUse.Name, s.Config.SpinThreshold,
+						)}
+						s.appendLog(spinEntry)
+						tuiSend(LogMsg{SessionID: s.ID, Entry: spinEntry})
+						toolResults = append(toolResults,
+							anthropic.NewToolResultBlock(toolUse.ID, "Session paused: spin detected.", true),
+						)
+						continue
+					}
+				}
 
 				// Permission gate.
 				approved, err := s.checkPermission(toolUse.Name, toolUse.Input, tuiSend)
@@ -257,6 +322,31 @@ func (s *Session) Run(ctx context.Context, client *anthropic.Client, tuiSend fun
 	s.appendLog(entry)
 	tuiSend(LogMsg{SessionID: s.ID, Entry: entry})
 	tuiSend(DoneMsg{SessionID: s.ID, Err: fmt.Errorf("max turns (%d) reached", s.Config.MaxTurns)})
+}
+
+// isRetryable returns true for transient API and network errors worth retrying.
+func isRetryable(err error) bool {
+	var apiErr *anthropic.Error
+	if errors.As(err, &apiErr) {
+		c := apiErr.StatusCode
+		return c == 429 || c == 529 || c == 500 || c == 503
+	}
+	var netErr net.Error
+	return errors.As(err, &netErr)
+}
+
+// retryBackoff returns the wait duration for the given retry attempt number
+// using exponential backoff capped at 30s, plus uniform jitter up to base.
+func retryBackoff(attempt, baseMs int) time.Duration {
+	base := time.Duration(baseMs) * time.Millisecond
+	backoff := base * (1 << attempt)
+	if backoff > 30*time.Second {
+		backoff = 30 * time.Second
+	}
+	if base > 0 {
+		backoff += time.Duration(rand.Int63n(int64(base)))
+	}
+	return backoff
 }
 
 func buildSystemPrompt(projectPath, goal string) string {

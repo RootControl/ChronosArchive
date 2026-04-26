@@ -51,8 +51,10 @@ type Model struct {
 	focus       panelFocus
 
 	// UI components
-	logViewport viewport.Model
-	spinner     spinner.Model
+	logViewport    viewport.Model
+	diffViewport   viewport.Model // scrollable diff for the active permission prompt
+	diffViewportSID string        // session ID whose content is loaded in diffViewport
+	spinner        spinner.Model
 
 	// Terminal size
 	width  int
@@ -121,6 +123,9 @@ func NewModel(sessions []*session.Session) Model {
 	vp := viewport.New(0, 0)
 	vp.Style = lipgloss.NewStyle()
 
+	dvp := viewport.New(0, 0)
+	dvp.Style = lipgloss.NewStyle()
+
 	m := Model{
 		order:        order,
 		views:        views,
@@ -128,6 +133,7 @@ func NewModel(sessions []*session.Session) Model {
 		pendingPerms: make(map[string]session.PermissionMsg),
 		spinner:      sp,
 		logViewport:  vp,
+		diffViewport: dvp,
 	}
 	return m
 }
@@ -319,6 +325,26 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			break
 		}
 
+		// When a permission prompt is open, hijack scroll keys for the diff viewport.
+		if sid := m.selectedSessionID(); sid != "" {
+			if _, hasPerm := m.pendingPerms[sid]; hasPerm {
+				switch msg.String() {
+				case "up", "k":
+					m.diffViewport.LineUp(1)
+					return m, tea.Batch(cmds...)
+				case "down", "j":
+					m.diffViewport.LineDown(1)
+					return m, tea.Batch(cmds...)
+				case "pgup":
+					m.diffViewport.HalfViewUp()
+					return m, tea.Batch(cmds...)
+				case "pgdown":
+					m.diffViewport.HalfViewDown()
+					return m, tea.Batch(cmds...)
+				}
+			}
+		}
+
 		switch msg.String() {
 		case "q", "ctrl+c":
 			return m, tea.Quit
@@ -375,6 +401,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if req, ok := m.pendingPerms[sid]; ok {
 					m.approvePermission(req.SessionID, true)
 					delete(m.pendingPerms, sid)
+					m.clearDiffViewport()
 				}
 			}
 
@@ -383,6 +410,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if req, ok := m.pendingPerms[sid]; ok {
 					m.approvePermission(req.SessionID, false)
 					delete(m.pendingPerms, sid)
+					m.clearDiffViewport()
 				}
 			}
 
@@ -471,6 +499,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.SessionID == m.selectedSessionID() {
 			m.focus = panelDetail
 		}
+		// Load diff content into scrollable viewport.
+		if content := buildDiffContent(msg.ToolName, msg.RawInput); content != "" {
+			m.diffViewport.SetContent(content)
+			m.diffViewport.GotoTop()
+			m.diffViewportSID = msg.SessionID
+			m.resizeDiffViewport()
+		}
 
 	case session.DoneMsg:
 		if sv, ok := m.views[msg.SessionID]; ok {
@@ -483,6 +518,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			sv.turn = m.sessions[msg.SessionID].Turn()
 		}
 		delete(m.pendingPerms, msg.SessionID)
+		if msg.SessionID == m.diffViewportSID {
+			m.clearDiffViewport()
+		}
 
 	case NewSessionMsg:
 		s := msg.Session
@@ -734,7 +772,24 @@ func (m Model) renderSessionList() string {
 		}
 		sb.WriteString(row + "\n")
 	}
+
+	// Grand total cost footer.
+	if total := m.totalCost(); total > 0 {
+		sb.WriteString(styleGray.Render(strings.Repeat("─", leftPanelWidth-2)) + "\n")
+		sb.WriteString(styleGray.Render(fmt.Sprintf("  total: $%.4f", total)) + "\n")
+	}
 	return sb.String()
+}
+
+func (m Model) totalCost() float64 {
+	var total float64
+	for _, id := range m.order {
+		if s, ok := m.sessions[id]; ok {
+			in, out := s.TokenUsage()
+			total += estimateCost(s.Config.Model, in, out)
+		}
+	}
+	return total
 }
 
 func stateIcon(s session.State, sp spinner.Model) string {
@@ -799,13 +854,69 @@ func (m Model) renderDetail() string {
 	return strings.Join(parts, "\n")
 }
 
+func (m *Model) resizeDiffViewport() {
+	dvpWidth := m.width - leftPanelWidth - 6
+	if dvpWidth < 10 {
+		dvpWidth = 10
+	}
+	dvpHeight := m.height - 11
+	if dvpHeight < 4 {
+		dvpHeight = 4
+	}
+	m.diffViewport.Width = dvpWidth
+	m.diffViewport.Height = dvpHeight
+}
+
+func (m *Model) clearDiffViewport() {
+	m.diffViewport.SetContent("")
+	m.diffViewportSID = ""
+}
+
+// buildDiffContent builds the full scrollable content for write_file and edit_file prompts.
+func buildDiffContent(toolName string, rawInput []byte) string {
+	var m map[string]any
+	if err := json.Unmarshal(rawInput, &m); err != nil {
+		return ""
+	}
+	switch toolName {
+	case "edit_file":
+		old, _ := m["old_string"].(string)
+		nw, _ := m["new_string"].(string)
+		if old == "" && nw == "" {
+			return ""
+		}
+		var sb strings.Builder
+		for _, line := range strings.Split(old, "\n") {
+			sb.WriteString(styleRed.Render("- "+line) + "\n")
+		}
+		sb.WriteString("\n")
+		for _, line := range strings.Split(nw, "\n") {
+			sb.WriteString(styleGreen.Render("+ "+line) + "\n")
+		}
+		return strings.TrimRight(sb.String(), "\n")
+	case "write_file":
+		content, _ := m["content"].(string)
+		if content == "" {
+			return ""
+		}
+		var sb strings.Builder
+		for i, line := range strings.Split(content, "\n") {
+			sb.WriteString(styleGray.Render(fmt.Sprintf("%4d │ ", i+1)) + line + "\n")
+		}
+		return strings.TrimRight(sb.String(), "\n")
+	}
+	return ""
+}
+
 func (m Model) renderPermPrompt(req session.PermissionMsg) string {
 	title := stylePermTitle.Render("PERMISSION REQUIRED")
 	tool := "Tool:   " + styleToolName.Render(req.ToolName)
 	detail := "Action: " + req.Description
 	keys := styleGreen.Render("[y] Approve") + "  " + styleRed.Render("[n] Deny")
 	lines := []string{title, tool, detail}
-	if preview := permPreview(req.ToolName, req.RawInput); preview != "" {
+	if m.diffViewportSID == req.SessionID && m.diffViewport.TotalLineCount() > 0 {
+		lines = append(lines, "", m.diffViewport.View())
+	} else if preview := permPreview(req.ToolName, req.RawInput); preview != "" {
 		lines = append(lines, "", preview)
 	}
 	lines = append(lines, "", keys)
@@ -872,6 +983,7 @@ func (m *Model) resizeViewport() {
 	m.logViewport.Width = rightWidth
 	m.logViewport.Height = vpHeight
 	m.refreshLogViewport()
+	m.resizeDiffViewport()
 }
 
 func (m *Model) refreshLogViewport() {

@@ -29,6 +29,9 @@ type SessionConfig struct {
 	ContextWindow   int             `yaml:"context_window"`  // keep first + last N messages when history exceeds 2×N (0 = disabled)
 	DependsOn       []string        `yaml:"depends_on"`      // session names that must complete (StateDone) before this one starts
 	GitHub          GitHubConfig    `yaml:"github"`          // optional: auto-create a PR on completion
+	SpinThreshold   int             `yaml:"spin_threshold"`  // pause when same tool+input repeats N times; 0=default(3), -1=disabled
+	MaxRetries      int             `yaml:"max_retries"`     // API retry attempts on retryable errors; 0=default(3), -1=disabled
+	RetryBaseMs     int             `yaml:"retry_base_ms"`   // base backoff in ms for retries (default 1000)
 }
 
 // GitHubConfig controls auto-PR creation after a session completes.
@@ -111,6 +114,15 @@ func Resolve(cfg *Config) error {
 			// MaxTurns == 0 means unlimited turns.
 			if sc.Thinking && sc.ThinkingBudget <= 0 {
 				sc.ThinkingBudget = 10000
+			}
+			if sc.SpinThreshold == 0 {
+				sc.SpinThreshold = 3
+			}
+			if sc.MaxRetries == 0 {
+				sc.MaxRetries = 3
+			}
+			if sc.RetryBaseMs == 0 {
+				sc.RetryBaseMs = 1000
 			}
 			expanded = append(expanded, sc)
 		}

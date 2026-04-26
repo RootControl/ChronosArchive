@@ -102,6 +102,11 @@ type Session struct {
 	batchTotal     int
 	batchSucceeded int
 	batchPending   int
+
+	// Spin detection — only accessed from Run() goroutine, no mutex needed.
+	lastToolName    string
+	lastToolInput   string
+	consecutiveCount int
 }
 
 // New creates a Session. Call Run() in a goroutine to start the agent loop.
