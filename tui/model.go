@@ -32,6 +32,7 @@ type sessionView struct {
 	turn      int
 	startedAt time.Time
 	err       error
+	toolCalls map[string]int // tool name → call count
 }
 
 // Model is the root Bubble Tea model.
@@ -116,6 +117,7 @@ func NewModel(sessions []*session.Session) Model {
 			name:      s.Config.Name,
 			state:     session.StateStarting,
 			startedAt: s.StartedAt(),
+			toolCalls: make(map[string]int),
 		}
 		sessMap[s.ID] = s
 	}
@@ -441,6 +443,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			}
 
+		case "X":
+			if sid := m.selectedSessionID(); sid != "" {
+				if s, ok := m.sessions[sid]; ok {
+					sv := m.views[sid]
+					if sv.state == session.StateRunning || sv.state == session.StatePaused || sv.state == session.StateWaitingPermission {
+						s.Kill()
+					}
+				}
+			}
+
 		case "r":
 			if sid := m.selectedSessionID(); sid != "" {
 				if sv := m.views[sid]; sv.state == session.StateFailed || sv.state == session.StateDone {
@@ -484,6 +496,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			sv.logs = append(sv.logs, msg.Entry)
 			if len(sv.logs) > 500 {
 				sv.logs = sv.logs[1:]
+			}
+			if msg.Entry.Kind == session.LogToolCall && msg.Entry.ToolName != "" {
+				sv.toolCalls[msg.Entry.ToolName]++
 			}
 			if msg.SessionID == m.selectedSessionID() {
 				m.refreshLogViewport()
@@ -530,6 +545,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			name:      s.Config.Name,
 			state:     session.StateStarting,
 			startedAt: s.StartedAt(),
+			toolCalls: make(map[string]int),
 		}
 		m.sessions[s.ID] = s
 		m.selectedIdx = len(m.order) - 1
@@ -545,6 +561,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			sv.turn = 0
 			sv.err = nil
 			sv.startedAt = s.StartedAt()
+			sv.toolCalls = make(map[string]int)
 		}
 		delete(m.pendingPerms, s.ID)
 		m.refreshLogViewport()
@@ -713,7 +730,7 @@ func (m *Model) resetForm() {
 
 func (m Model) renderHeader() string {
 	title := styleBold.Render("ChronosArchive")
-	help := styleGray.Render("[↑↓/jk] nav  [tab] panel  [y/n] approve  [a] add  [p] pause  [r] retry  [/] search  [e] export  [T] template  [q] quit")
+	help := styleGray.Render("[↑↓/jk] nav  [tab] panel  [y/n] approve  [a] add  [p] pause  [X] kill  [r] retry  [/] search  [e] export  [T] template  [q] quit")
 	space := strings.Repeat(" ", max(0, m.width-lipgloss.Width(title)-lipgloss.Width(help)-2))
 	return styleHeader.Width(m.width).Render(title + space + help)
 }
@@ -763,7 +780,13 @@ func (m Model) renderSessionList() string {
 			}
 		}
 
-		row := fmt.Sprintf(" %s %s%s", icon, name, turnStr)
+		elapsedStr := ""
+		if sv.state == session.StateRunning || sv.state == session.StateWaitingPermission || sv.state == session.StatePaused {
+			if elapsed := formatElapsed(sv.startedAt, sv.state); elapsed != "" {
+				elapsedStr = styleGray.Render(" " + elapsed)
+			}
+		}
+		row := fmt.Sprintf(" %s %s%s%s", icon, name, turnStr, elapsedStr)
 		if _, hasPerm := m.pendingPerms[id]; hasPerm {
 			row += " " + styleYellow.Render("!")
 		}
@@ -790,6 +813,20 @@ func (m Model) totalCost() float64 {
 		}
 	}
 	return total
+}
+
+func formatElapsed(startedAt time.Time, state session.State) string {
+	if state == session.StateDone || state == session.StateFailed {
+		return ""
+	}
+	d := time.Since(startedAt).Round(time.Second)
+	if d < time.Minute {
+		return fmt.Sprintf("%ds", int(d.Seconds()))
+	}
+	if d < time.Hour {
+		return fmt.Sprintf("%dm%ds", int(d.Minutes()), int(d.Seconds())%60)
+	}
+	return fmt.Sprintf("%dh%dm", int(d.Hours()), int(d.Minutes())%60)
 }
 
 func stateIcon(s session.State, sp spinner.Model) string {
@@ -822,6 +859,9 @@ func (m Model) renderDetail() string {
 	if sv.err != nil {
 		heading += "  " + styleRed.Render(sv.err.Error())
 	}
+	if elapsed := formatElapsed(sv.startedAt, sv.state); elapsed != "" {
+		heading += "  " + styleGray.Render(elapsed)
+	}
 	if s, ok := m.sessions[sid]; ok {
 		in, out := s.TokenUsage()
 		if in+out > 0 {
@@ -837,10 +877,30 @@ func (m Model) renderDetail() string {
 	case session.StateFailed, session.StateDone:
 		heading += "  " + styleGray.Render("[r] retry")
 	}
-	parts = append(parts, heading, "")
+	parts = append(parts, heading)
+
+	// Turn progress bar (only when max_turns is bounded).
+	if s, ok := m.sessions[sid]; ok {
+		maxT := s.Config.MaxTurns
+		curT := sv.turn
+		if maxT > 0 && curT > 0 {
+			const barWidth = 20
+			filled := curT * barWidth / maxT
+			if filled > barWidth {
+				filled = barWidth
+			}
+			bar := styleGreen.Render(strings.Repeat("█", filled)) + styleGray.Render(strings.Repeat("░", barWidth-filled))
+			parts = append(parts, styleGray.Render(fmt.Sprintf("  turn %d/%d  ", curT, maxT))+bar)
+		}
+	}
+	parts = append(parts, "")
 
 	if req, ok := m.pendingPerms[sid]; ok {
 		parts = append(parts, m.renderPermPrompt(req))
+	}
+
+	if stats := m.renderToolStats(sv); stats != "" {
+		parts = append(parts, stats)
 	}
 
 	if m.logSearching {
@@ -852,6 +912,40 @@ func (m Model) renderDetail() string {
 
 	parts = append(parts, m.logViewport.View())
 	return strings.Join(parts, "\n")
+}
+
+func (m Model) renderToolStats(sv *sessionView) string {
+	if len(sv.toolCalls) == 0 {
+		return ""
+	}
+	// Sort tools by call count descending, then alphabetically.
+	type kv struct {
+		name  string
+		count int
+	}
+	sorted := make([]kv, 0, len(sv.toolCalls))
+	for k, v := range sv.toolCalls {
+		sorted = append(sorted, kv{k, v})
+	}
+	for i := 1; i < len(sorted); i++ {
+		for j := i; j > 0 && (sorted[j].count > sorted[j-1].count || (sorted[j].count == sorted[j-1].count && sorted[j].name < sorted[j-1].name)); j-- {
+			sorted[j], sorted[j-1] = sorted[j-1], sorted[j]
+		}
+	}
+	const maxShow = 5
+	var sb strings.Builder
+	sb.WriteString(styleGray.Render("tools: "))
+	for i, kv := range sorted {
+		if i >= maxShow {
+			break
+		}
+		if i > 0 {
+			sb.WriteString(styleGray.Render("  "))
+		}
+		sb.WriteString(styleToolName.Render(kv.name))
+		sb.WriteString(styleGray.Render(fmt.Sprintf("×%d", kv.count)))
+	}
+	return sb.String()
 }
 
 func (m *Model) resizeDiffViewport() {

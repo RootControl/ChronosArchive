@@ -82,6 +82,9 @@ type Session struct {
 	RespCh  chan PermissionResponse // TUI → session: decision
 	DoneCh  chan struct{}           // closed when Run() returns
 
+	// kill cancels only this session's context. Set by SetKill after New().
+	kill func()
+
 	// Mutable state — guarded by mu.
 	mu        sync.RWMutex
 	state     State
@@ -225,6 +228,24 @@ func (s *Session) Resume() {
 	if s.pauseCh != nil {
 		close(s.pauseCh)
 		s.pauseCh = nil
+	}
+}
+
+// SetKill stores the cancel function for this session's context.
+// Call once after New(), before launching Run().
+func (s *Session) SetKill(cancel func()) {
+	s.mu.Lock()
+	s.kill = cancel
+	s.mu.Unlock()
+}
+
+// Kill cancels this session's context, causing Run() to exit on the next turn.
+func (s *Session) Kill() {
+	s.mu.RLock()
+	fn := s.kill
+	s.mu.RUnlock()
+	if fn != nil {
+		fn()
 	}
 }
 

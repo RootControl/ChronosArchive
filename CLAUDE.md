@@ -103,7 +103,7 @@ sessions.example.yaml       Annotated example config
 
 ### TUI key bindings
 
-`↑↓`/`jk` — navigate sessions · `tab` — toggle panel focus · `a` — add session · `y`/`n` — approve/deny · `p` — pause/resume · `r` — retry · `e` — export log · `/` — search logs · `T` — save template · `pgup`/`pgdn` — scroll logs · `q` — quit
+`↑↓`/`jk` — navigate sessions · `tab` — toggle panel focus · `a` — add session · `y`/`n` — approve/deny · `p` — pause/resume · `X` — kill session · `r` — retry · `e` — export log · `/` — search logs · `T` — save template · `pgup`/`pgdn` — scroll logs · `q` — quit
 
 **Add-session form:** `tab`/`shift+tab` — next/prev field · `space` — toggle bool · `ctrl+t` — cycle templates · `enter` — launch · `esc` — cancel
 

@@ -32,6 +32,7 @@ type SessionConfig struct {
 	SpinThreshold   int             `yaml:"spin_threshold"`  // pause when same tool+input repeats N times; 0=default(3), -1=disabled
 	MaxRetries      int             `yaml:"max_retries"`     // API retry attempts on retryable errors; 0=default(3), -1=disabled
 	RetryBaseMs     int             `yaml:"retry_base_ms"`   // base backoff in ms for retries (default 1000)
+	SystemPrompt    string          `yaml:"system_prompt"`   // optional extra instructions appended to the built-in system prompt
 }
 
 // GitHubConfig controls auto-PR creation after a session completes.

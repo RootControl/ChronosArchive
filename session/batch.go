@@ -43,7 +43,7 @@ func RunBatch(ctx context.Context, client *anthropic.Client, sessions []*Session
 			Model:     anthropic.Model(s.Config.Model),
 			MaxTokens: 8192,
 			System: []anthropic.TextBlockParam{
-				{Text: buildSystemPrompt(s.Config.ProjectPath, s.Config.Goal)},
+				{Text: buildSystemPrompt(s.Config.ProjectPath, s.Config.Goal, s.Config.SystemPrompt)},
 			},
 			Messages: []anthropic.MessageParam{
 				anthropic.NewUserMessage(anthropic.NewTextBlock(s.Config.Goal)),
@@ -166,7 +166,7 @@ func RunBatch(ctx context.Context, client *anthropic.Client, sessions []*Session
 func (s *Session) runBatchAgentLoop(ctx context.Context, client *anthropic.Client, messages []anthropic.MessageParam, lastResponse anthropic.Message, startTurn int, tuiSend func(any)) {
 	defer close(s.DoneCh)
 
-	systemPrompt := buildSystemPrompt(s.Config.ProjectPath, s.Config.Goal)
+	systemPrompt := buildSystemPrompt(s.Config.ProjectPath, s.Config.Goal, s.Config.SystemPrompt)
 	toolDefs := buildToolDefinitions()
 	currentResponse := lastResponse
 

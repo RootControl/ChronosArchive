@@ -19,7 +19,7 @@ func (s *Session) Run(ctx context.Context, client *anthropic.Client, tuiSend fun
 	s.setState(StateRunning)
 	tuiSend(StateMsg{SessionID: s.ID, NewState: StateRunning})
 
-	systemPrompt := buildSystemPrompt(s.Config.ProjectPath, s.Config.Goal)
+	systemPrompt := buildSystemPrompt(s.Config.ProjectPath, s.Config.Goal, s.Config.SystemPrompt)
 	toolDefs := buildToolDefinitions()
 
 	// Attempt to resume from a saved snapshot.
@@ -349,8 +349,8 @@ func retryBackoff(attempt, baseMs int) time.Duration {
 	return backoff
 }
 
-func buildSystemPrompt(projectPath, goal string) string {
-	return fmt.Sprintf(`You are an autonomous coding agent working on a software project.
+func buildSystemPrompt(projectPath, goal, extra string) string {
+	base := fmt.Sprintf(`You are an autonomous coding agent working on a software project.
 
 PROJECT DIRECTORY: %s
 GOAL: %s
@@ -360,4 +360,8 @@ You have tools: read_file, write_file, edit_file, list_directory, bash, grep.
 Work step by step toward the goal. When complete, say "GOAL COMPLETE" and stop.
 Do not ask clarifying questions — use tools to explore and act directly.
 Always read files before editing them. Make focused, minimal changes.`, projectPath, goal)
+	if extra != "" {
+		base += "\n\n" + extra
+	}
+	return base
 }

@@ -134,19 +134,25 @@ func main() {
 		id := fmt.Sprintf("s%d", nextID)
 		nextID++
 		s := session.New(id, tmp.Sessions[0])
+		sCtx, sCancel := context.WithCancel(ctx)
+		s.SetKill(sCancel)
 		prog.Send(tui.NewSessionMsg{Session: s})
-		go s.Run(ctx, &client, func(msg any) {
-			prog.Send(msg)
-		})
+		go func() {
+			defer sCancel()
+			s.Run(sCtx, &client, func(msg any) { prog.Send(msg) })
+		}()
 	}
 	model.SetLaunch(launchSession)
 
 	model.SetRetry(func(old *session.Session) {
 		s := session.New(old.ID, old.Config)
+		sCtx, sCancel := context.WithCancel(ctx)
+		s.SetKill(sCancel)
 		prog.Send(tui.RetrySessionMsg{Session: s})
-		go s.Run(ctx, &client, func(msg any) {
-			prog.Send(msg)
-		})
+		go func() {
+			defer sCancel()
+			s.Run(sCtx, &client, func(msg any) { prog.Send(msg) })
+		}()
 	})
 
 	// Separate sessions into batch vs interactive.
@@ -168,7 +174,8 @@ func main() {
 
 	// Launch interactive sessions, waiting for declared dependencies first.
 	for _, s := range normalSessions {
-		s := s // capture loop variable
+		sCtx, sCancel := context.WithCancel(ctx)
+		s.SetKill(sCancel)
 		deps := make([]*session.Session, 0, len(s.Config.DependsOn))
 		for _, name := range s.Config.DependsOn {
 			if dep, ok := sessionsByName[name]; ok {
@@ -176,10 +183,11 @@ func main() {
 			}
 		}
 		go func() {
+			defer sCancel()
 			for _, dep := range deps {
 				<-dep.DoneCh // wait for dependency to finish
 			}
-			s.Run(ctx, &client, func(msg any) { prog.Send(msg) })
+			s.Run(sCtx, &client, func(msg any) { prog.Send(msg) })
 		}()
 	}
 
