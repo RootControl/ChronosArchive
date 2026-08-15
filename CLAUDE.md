@@ -53,7 +53,7 @@ session/
   persist.go                Snapshot save/load (resume across restarts)
   compress.go               Sliding-window context compression
   batch.go                  Anthropic Message Batches API: submit, poll, deliver results
-  github.go                 gh pr create on session completion
+  github.go                 push branch + gh pr create on session completion
 pricing/
   pricing.go                Model rates + cache/batch multipliers; shared by session and tui
 tools/
@@ -126,7 +126,7 @@ Key optional fields:
 - `batch` — submit via Anthropic Batch API (50% cost, async, single-turn)
 - `depends_on` — list of session names that must complete before this one starts
 - `project_paths` — list of paths; each becomes its own session named `<name>-1`, `<name>-2`, etc.
-- `github.create_pr` — run `gh pr create` on completion; also `base_branch`, `title_prefix`, `draft`
+- `github.create_pr` — on completion, push the session branch and run `gh pr create`; also `base_branch`, `remote` (default `origin`), `title_prefix`, `draft`. The push is done explicitly because `gh pr create` *prompts* for where to push an unpushed branch, and the session has no TTY; `--head` is passed so gh skips its own push/fork handling
 
 ## Anthropic Go SDK patterns
 

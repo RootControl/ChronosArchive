@@ -28,8 +28,9 @@ sessions:
     context_window: 0                 # sliding-window compression: keep first + last N messages (0 = off)
     # depends_on: []                  # session names that must complete before this one starts (pipeline mode)
     # github:
-    #   create_pr: false              # run gh pr create when session completes with StateDone
+    #   create_pr: false              # on completion, push the branch and run gh pr create
     #   base_branch: main             # PR target branch (default: main)
+    #   remote: origin                # git remote to push the branch to (default: origin)
     #   title_prefix: "feat: "        # prepended to auto-generated PR title
     #   draft: false                  # open as draft PR
 

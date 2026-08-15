@@ -43,8 +43,9 @@ type SessionConfig struct {
 
 // GitHubConfig controls auto-PR creation after a session completes.
 type GitHubConfig struct {
-	CreatePR    bool   `yaml:"create_pr"`    // if true, run gh pr create on StateDone
+	CreatePR    bool   `yaml:"create_pr"`    // if true, push the branch and run gh pr create on StateDone
 	BaseBranch  string `yaml:"base_branch"`  // target branch (default: main)
+	Remote      string `yaml:"remote"`       // git remote to push to (default: origin)
 	TitlePrefix string `yaml:"title_prefix"` // prepended to auto-generated PR title
 	Draft       bool   `yaml:"draft"`        // open as draft PR
 }
