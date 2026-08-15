@@ -22,6 +22,7 @@ func (s *Session) Run(ctx context.Context, client *anthropic.Client, tuiSend fun
 
 	systemPrompt := buildSystemPrompt(s.Config.ProjectPath, s.Config.Goal, s.Config.SystemPrompt)
 	shape := buildRequestShape(s.Config, systemPrompt)
+	maxTurns := s.Config.MaxTurnsOrDefault() // 0 means unlimited
 
 	// Attempt to resume from a saved snapshot.
 	startTurn := 0
@@ -54,7 +55,7 @@ func (s *Session) Run(ctx context.Context, client *anthropic.Client, tuiSend fun
 		tuiSend(LogMsg{SessionID: s.ID, Entry: entry})
 	}
 
-	for turn := startTurn; s.Config.MaxTurns == 0 || turn < s.Config.MaxTurns; turn++ {
+	for turn := startTurn; maxTurns == 0 || turn < maxTurns; turn++ {
 		s.setTurn(turn + 1)
 
 		// Check for pause before each API call. Blocks until resumed or ctx cancelled.
@@ -303,10 +304,10 @@ func (s *Session) Run(ctx context.Context, client *anthropic.Client, tuiSend fun
 	// Max turns reached.
 	s.setState(StateDone)
 	s.deleteSnapshot()
-	entry := LogEntry{Kind: LogSystem, Text: fmt.Sprintf("max turns (%d) reached", s.Config.MaxTurns)}
+	entry := LogEntry{Kind: LogSystem, Text: fmt.Sprintf("max turns (%d) reached", maxTurns)}
 	s.appendLog(entry)
 	tuiSend(LogMsg{SessionID: s.ID, Entry: entry})
-	tuiSend(DoneMsg{SessionID: s.ID, Err: fmt.Errorf("max turns (%d) reached", s.Config.MaxTurns)})
+	tuiSend(DoneMsg{SessionID: s.ID, Err: fmt.Errorf("max turns (%d) reached", maxTurns)})
 }
 
 // isRetryable returns true for transient API and network errors worth retrying.

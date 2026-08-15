@@ -41,12 +41,13 @@ func main() {
 		os.Exit(1)
 	}
 
+	maxTurns := config.DefaultMaxTurns
 	cfg := config.SessionConfig{
 		Name:        "testloop",
 		ProjectPath: *project,
 		Goal:        *goal,
 		Model:       *model,
-		MaxTurns:    config.DefaultMaxTurns,
+		MaxTurns:    &maxTurns,
 		ToolPermissions: config.ToolPermissions{
 			AutoApproveReads:  true,
 			AutoApproveBash:   *autoApprove,

@@ -885,7 +885,7 @@ func (m Model) renderDetail() string {
 
 	// Turn progress bar (only when max_turns is bounded).
 	if s, ok := m.sessions[sid]; ok {
-		maxT := s.Config.MaxTurns
+		maxT := s.Config.MaxTurnsOrDefault()
 		curT := sv.turn
 		if maxT > 0 && curT > 0 {
 			const barWidth = 20

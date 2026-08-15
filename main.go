@@ -54,7 +54,7 @@ func main() {
 					ProjectPath:    *flagProject,
 					Goal:           *flagGoal,
 					Model:          *flagModel,
-					MaxTurns:       *flagMaxTurns,
+					MaxTurns:       flagMaxTurns,
 					Thinking:       *flagThinking,
 					ThinkingBudget: *flagThinkingBudget,
 					Batch:          *flagBatch,

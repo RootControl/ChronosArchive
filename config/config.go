@@ -23,7 +23,7 @@ type SessionConfig struct {
 	Goal            string          `yaml:"goal"`
 	Model           string          `yaml:"model"`
 	ToolPermissions ToolPermissions `yaml:"tool_permissions"`
-	MaxTurns        int             `yaml:"max_turns"`
+	MaxTurns        *int            `yaml:"max_turns"` // nil (omitted) = DefaultMaxTurns; 0 = unlimited
 	Thinking        bool            `yaml:"thinking"`
 	ThinkingBudget  int             `yaml:"thinking_budget"` // tokens; default 10000 when thinking enabled
 	Batch           bool            `yaml:"batch"`           // submit via Anthropic Message Batches API (50% cost, async, single-turn)
@@ -59,6 +59,22 @@ type ToolPermissions struct {
 	AutoApproveGitReads  bool `yaml:"auto_approve_git_reads"`  // git status/log/diff/branch/show/blame
 	AutoApproveGitWrites bool `yaml:"auto_approve_git_writes"` // git add/commit/checkout/…
 	AutoApproveRunTests  bool `yaml:"auto_approve_run_tests"`  // run_tests
+}
+
+// intPtr returns a pointer to v, for setting optional int config fields.
+func intPtr(v int) *int { return &v }
+
+// MaxTurnsOrDefault returns the effective turn cap: DefaultMaxTurns when
+// max_turns was omitted, otherwise the configured value. A result of 0 means
+// unlimited turns. Safe to call on a config that has not been through Resolve.
+func (c SessionConfig) MaxTurnsOrDefault() int {
+	if c.MaxTurns == nil {
+		return DefaultMaxTurns
+	}
+	if *c.MaxTurns < 0 {
+		return DefaultMaxTurns
+	}
+	return *c.MaxTurns
 }
 
 func Load(path string) (*Config, error) {
@@ -114,10 +130,13 @@ func Resolve(cfg *Config) error {
 			if sc.Model == "" {
 				sc.Model = DefaultModel
 			}
-			if sc.MaxTurns < 0 {
-				sc.MaxTurns = DefaultMaxTurns
+			// Omitting max_turns applies the default cap; an explicit 0 opts
+			// into unlimited turns. A pointer is what keeps those two cases
+			// distinguishable — with a plain int both are the zero value.
+			// A negative value is treated as "use the default".
+			if sc.MaxTurns == nil || *sc.MaxTurns < 0 {
+				sc.MaxTurns = intPtr(DefaultMaxTurns)
 			}
-			// MaxTurns == 0 means unlimited turns.
 			if sc.Thinking && sc.ThinkingBudget <= 0 {
 				sc.ThinkingBudget = 10000
 			}

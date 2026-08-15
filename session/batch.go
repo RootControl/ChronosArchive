@@ -154,9 +154,10 @@ func (s *Session) runBatchAgentLoop(ctx context.Context, client *anthropic.Clien
 
 	systemPrompt := buildSystemPrompt(s.Config.ProjectPath, s.Config.Goal, s.Config.SystemPrompt)
 	shape := buildRequestShape(s.Config, systemPrompt)
+	maxTurns := s.Config.MaxTurnsOrDefault() // 0 means unlimited
 	currentResponse := lastResponse
 
-	for turn := startTurn; s.Config.MaxTurns == 0 || turn < s.Config.MaxTurns; turn++ {
+	for turn := startTurn; maxTurns == 0 || turn < maxTurns; turn++ {
 		s.setTurn(turn + 1)
 
 		// Check for pause.
@@ -286,10 +287,10 @@ func (s *Session) runBatchAgentLoop(ctx context.Context, client *anthropic.Clien
 
 	s.setState(StateDone)
 	s.deleteSnapshot()
-	entry := LogEntry{Kind: LogSystem, Text: fmt.Sprintf("max turns (%d) reached", s.Config.MaxTurns)}
+	entry := LogEntry{Kind: LogSystem, Text: fmt.Sprintf("max turns (%d) reached", maxTurns)}
 	s.appendLog(entry)
 	tuiSend(LogMsg{SessionID: s.ID, Entry: entry})
-	tuiSend(DoneMsg{SessionID: s.ID, Err: fmt.Errorf("max turns (%d) reached", s.Config.MaxTurns)})
+	tuiSend(DoneMsg{SessionID: s.ID, Err: fmt.Errorf("max turns (%d) reached", maxTurns)})
 }
 
 // pollBatch polls a batch until it ends and returns the results.
