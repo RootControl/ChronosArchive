@@ -35,6 +35,9 @@ func main() {
 	flagThinking       := flag.Bool("thinking",        false, "enable extended thinking (used with -goal)")
 	flagThinkingBudget := flag.Int("thinking-budget",  10000, "thinking token budget (used with -thinking)")
 	flagBatch          := flag.Bool("batch",           false, "submit via Anthropic Message Batches API (50% cost, single-turn, async)")
+	flagMaxOutput      := flag.Int("max-output-tokens", config.DefaultMaxOutputTokens, "max output tokens per API call (used with -goal)")
+	flagEffort         := flag.String("effort",        "", "effort level: low, medium, high, or max (used with -goal)")
+	flagNoCache        := flag.Bool("no-prompt-cache", false, "disable prompt caching (on by default; caching cuts cost on multi-turn runs)")
 
 	flag.Parse()
 
@@ -55,6 +58,10 @@ func main() {
 					Thinking:       *flagThinking,
 					ThinkingBudget: *flagThinkingBudget,
 					Batch:          *flagBatch,
+
+					MaxOutputTokens:    *flagMaxOutput,
+					Effort:             *flagEffort,
+					DisablePromptCache: *flagNoCache,
 					ToolPermissions: config.ToolPermissions{
 						AutoApproveReads:    *flagApproveReads,
 						AutoApproveBash:     *flagApproveBash,

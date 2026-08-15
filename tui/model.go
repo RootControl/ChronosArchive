@@ -808,8 +808,7 @@ func (m Model) totalCost() float64 {
 	var total float64
 	for _, id := range m.order {
 		if s, ok := m.sessions[id]; ok {
-			in, out := s.TokenUsage()
-			total += estimateCost(s.Config.Model, in, out)
+			total += sessionCost(s)
 		}
 	}
 	return total
@@ -863,10 +862,15 @@ func (m Model) renderDetail() string {
 		heading += "  " + styleGray.Render(elapsed)
 	}
 	if s, ok := m.sessions[sid]; ok {
-		in, out := s.TokenUsage()
-		if in+out > 0 {
-			cost := estimateCost(s.Config.Model, in, out)
-			heading += "  " + styleGray.Render(fmt.Sprintf("%dk tok  $%.4f", (in+out)/1000, cost))
+		u := sessionUsage(s)
+		if total := u.total(); total > 0 {
+			stat := fmt.Sprintf("%dk tok  $%.4f", total/1000, sessionCost(s))
+			// Surface cache effectiveness — a low hit rate on a long run
+			// usually means something is invalidating the prefix.
+			if u.cacheRead > 0 {
+				stat += fmt.Sprintf("  %d%% cached", u.cacheRead*100/total)
+			}
+			heading += "  " + styleGray.Render(stat)
 		}
 	}
 	switch sv.state {

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"math/rand"
 	"net"
+	"strings"
 	"time"
 
 	anthropic "github.com/anthropics/anthropic-sdk-go"
@@ -20,7 +21,7 @@ func (s *Session) Run(ctx context.Context, client *anthropic.Client, tuiSend fun
 	tuiSend(StateMsg{SessionID: s.ID, NewState: StateRunning})
 
 	systemPrompt := buildSystemPrompt(s.Config.ProjectPath, s.Config.Goal, s.Config.SystemPrompt)
-	toolDefs := buildToolDefinitions()
+	shape := buildRequestShape(s.Config, systemPrompt)
 
 	// Attempt to resume from a saved snapshot.
 	startTurn := 0
@@ -95,23 +96,7 @@ func (s *Session) Run(ctx context.Context, client *anthropic.Client, tuiSend fun
 		messages = compressContext(messages, s.Config.ContextWindow)
 
 		// Build API params.
-		params := anthropic.MessageNewParams{
-			Model:     anthropic.Model(s.Config.Model),
-			MaxTokens: 8192,
-			System: []anthropic.TextBlockParam{
-				{Text: systemPrompt},
-			},
-			Messages: messages,
-			Tools:    toolDefs,
-		}
-		if s.Config.Thinking {
-			budget := int64(s.Config.ThinkingBudget)
-			// MaxTokens must exceed ThinkingBudget; bump if needed.
-			if params.MaxTokens <= budget {
-				params.MaxTokens = budget + 4096
-			}
-			params.Thinking = anthropic.ThinkingConfigParamOfEnabled(budget)
-		}
+		params := shape.applyToMessageParams(messages)
 
 		// Call the API with streaming, retrying on transient errors.
 		var (
@@ -188,7 +173,7 @@ func (s *Session) Run(ctx context.Context, client *anthropic.Client, tuiSend fun
 		}
 
 		// Track cumulative token usage.
-		s.addTokens(int64(accumulated.Usage.InputTokens), int64(accumulated.Usage.OutputTokens))
+		s.addUsage(accumulated.Usage)
 
 		// Append the assistant message to history.
 		messages = append(messages, accumulated.ToParam())
@@ -349,17 +334,31 @@ func retryBackoff(attempt, baseMs int) time.Duration {
 	return backoff
 }
 
+// toolNameList returns the comma-separated names of every tool the agent is
+// given, derived from the tool definitions so it cannot drift out of sync with
+// them.
+func toolNameList() string {
+	defs := buildToolDefinitions()
+	names := make([]string, 0, len(defs))
+	for _, d := range defs {
+		if d.OfTool != nil {
+			names = append(names, d.OfTool.Name)
+		}
+	}
+	return strings.Join(names, ", ")
+}
+
 func buildSystemPrompt(projectPath, goal, extra string) string {
 	base := fmt.Sprintf(`You are an autonomous coding agent working on a software project.
 
 PROJECT DIRECTORY: %s
 GOAL: %s
 
-You have tools: read_file, write_file, edit_file, list_directory, bash, grep.
+You have tools: %s.
 
 Work step by step toward the goal. When complete, say "GOAL COMPLETE" and stop.
 Do not ask clarifying questions — use tools to explore and act directly.
-Always read files before editing them. Make focused, minimal changes.`, projectPath, goal)
+Always read files before editing them. Make focused, minimal changes.`, projectPath, goal, toolNameList())
 	if extra != "" {
 		base += "\n\n" + extra
 	}

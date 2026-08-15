@@ -46,6 +46,7 @@ config/
 session/
   session.go                Session struct, state machine, thread-safe accessors, Pause/Resume
   events.go                 tea.Msg types sent to the TUI (StateMsg, LogMsg, PermissionMsg, DoneMsg)
+  params.go                 Shared request construction: model, max_tokens, thinking, effort, prompt caching
   run.go                    Agent loop: streaming API → tool dispatch → history management
   tools.go                  buildToolDefinitions() + executeTool() dispatcher
   permission.go             checkPermission(): auto-approve or block goroutine on RespCh
@@ -113,8 +114,11 @@ See `sessions.example.yaml`. Required fields per session: `name`, `project_path`
 
 Key optional fields:
 - `model` — default `claude-opus-4-6`
-- `max_turns` — default `50`
-- `thinking` / `thinking_budget` — extended thinking
+- `max_turns` — `0` (the zero value, so also the value when the key is omitted) means **unlimited**; `-1` selects the default of `50`
+- `thinking` — extended thinking. `thinking_budget` applies only to legacy models; newer models use adaptive thinking and ignore it
+- `effort` — `low`/`medium`/`high`/`max`; thinking depth and spend control on adaptive-thinking models
+- `max_output_tokens` — `max_tokens` per API call (default `8192`)
+- `disable_prompt_cache` — opt out of prompt caching, which is on by default
 - `context_window` — sliding-window compression (keep first + last N messages; `0` = off)
 - `batch` — submit via Anthropic Batch API (50% cost, async, single-turn)
 - `depends_on` — list of session names that must complete before this one starts

@@ -4,7 +4,13 @@ sessions:
     goal: "Refactor the authentication module to use JWT tokens. Add unit tests."
     model: "claude-opus-4-6"         # optional, defaults to claude-opus-4-6
     thinking: false                  # enable extended thinking (recommended for complex tasks)
-    thinking_budget: 10000           # max thinking tokens; default 10000 when thinking enabled
+    thinking_budget: 10000           # legacy models only (Haiku 4.5, Sonnet 4.5, Opus 4.5 and older);
+                                     # newer models use adaptive thinking + `effort` instead
+    effort: ""                       # low | medium | high | max — thinking depth and spend control.
+                                     # Ignored on legacy models, which reject the parameter.
+    max_output_tokens: 8192          # max_tokens per API call (default 8192)
+    disable_prompt_cache: false      # prompt caching is ON by default; it makes repeated turns
+                                     # dramatically cheaper. Set true only to opt out.
     tool_permissions:
       auto_approve_reads: true        # read_file, list_directory, grep auto-approved
       auto_approve_bash: false        # bash commands always require approval

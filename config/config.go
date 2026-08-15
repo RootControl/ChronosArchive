@@ -10,6 +10,7 @@ import (
 
 const DefaultModel = "claude-opus-4-6"
 const DefaultMaxTurns = 50
+const DefaultMaxOutputTokens = 8192
 
 type Config struct {
 	Sessions []SessionConfig `yaml:"sessions"`
@@ -33,6 +34,10 @@ type SessionConfig struct {
 	MaxRetries      int             `yaml:"max_retries"`     // API retry attempts on retryable errors; 0=default(3), -1=disabled
 	RetryBaseMs     int             `yaml:"retry_base_ms"`   // base backoff in ms for retries (default 1000)
 	SystemPrompt    string          `yaml:"system_prompt"`   // optional extra instructions appended to the built-in system prompt
+
+	MaxOutputTokens    int    `yaml:"max_output_tokens"`    // max_tokens per API call (default 8192)
+	Effort             string `yaml:"effort"`               // low|medium|high|max — thinking/spend control on adaptive-thinking models
+	DisablePromptCache bool   `yaml:"disable_prompt_cache"` // turn off prompt caching (on by default; cuts cost on multi-turn runs)
 }
 
 // GitHubConfig controls auto-PR creation after a session completes.
@@ -124,6 +129,14 @@ func Resolve(cfg *Config) error {
 			}
 			if sc.RetryBaseMs == 0 {
 				sc.RetryBaseMs = 1000
+			}
+			if sc.MaxOutputTokens <= 0 {
+				sc.MaxOutputTokens = DefaultMaxOutputTokens
+			}
+			switch sc.Effort {
+			case "", "low", "medium", "high", "max":
+			default:
+				return fmt.Errorf("session %q: invalid effort %q (want low, medium, high, or max)", s.Name, sc.Effort)
 			}
 			expanded = append(expanded, sc)
 		}
