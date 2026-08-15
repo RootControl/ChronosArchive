@@ -114,7 +114,7 @@ See `sessions.example.yaml`. Required fields per session: `name`, `project_path`
 
 Key optional fields:
 - `model` — default `claude-opus-4-6`
-- `max_turns` — `0` (the zero value, so also the value when the key is omitted) means **unlimited**; `-1` selects the default of `50`
+- `max_turns` — `0` means **unlimited turns**. Since `0` is the zero value, omitting the key in YAML also yields unlimited; pass `-1` to select the default of `50`. (The `-max-turns` CLI flag defaults to `50` instead, because the flag supplies its own default.)
 - `thinking` — extended thinking. `thinking_budget` applies only to legacy models; newer models use adaptive thinking and ignore it
 - `effort` — `low`/`medium`/`high`/`max`; thinking depth and spend control on adaptive-thinking models
 - `max_output_tokens` — `max_tokens` per API call (default `8192`)
