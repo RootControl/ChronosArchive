@@ -27,7 +27,7 @@ go run main.go \
   -goal "Refactor auth to use JWT" \
   -name my-session \           # default: "session"
   -model claude-sonnet-4-6 \   # default: claude-opus-4-6
-  -max-turns 30 \              # default: 50
+  -max-turns 30 \              # default: 50; 0 = unlimited turns
   -approve-reads \             # default: true
   -approve-bash \              # default: false
   -approve-writes              # default: false
@@ -73,7 +73,7 @@ sessions:
     project_path: /path/to/project
     goal: "Implement feature X"
     model: claude-opus-4-6       # optional, default: claude-opus-4-6
-    max_turns: 50                # optional, default: 50
+    max_turns: 50                # optional, default: 50. Set to 0 for unlimited turns
     thinking: false              # enable extended thinking
     thinking_budget: 10000       # thinking token budget
     context_window: 0            # sliding-window compression (0 = off; keep first + last N messages)

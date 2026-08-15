@@ -39,24 +39,10 @@ func RunBatch(ctx context.Context, client *anthropic.Client, sessions []*Session
 		s.appendLog(entry)
 		tuiSend(LogMsg{SessionID: s.ID, Entry: entry})
 
-		params := anthropic.MessageBatchNewParamsRequestParams{
-			Model:     anthropic.Model(s.Config.Model),
-			MaxTokens: 8192,
-			System: []anthropic.TextBlockParam{
-				{Text: buildSystemPrompt(s.Config.ProjectPath, s.Config.Goal, s.Config.SystemPrompt)},
-			},
-			Messages: []anthropic.MessageParam{
-				anthropic.NewUserMessage(anthropic.NewTextBlock(s.Config.Goal)),
-			},
-			Tools: buildToolDefinitions(),
-		}
-		if s.Config.Thinking {
-			budget := int64(s.Config.ThinkingBudget)
-			if params.MaxTokens <= budget {
-				params.MaxTokens = budget + 4096
-			}
-			params.Thinking = anthropic.ThinkingConfigParamOfEnabled(budget)
-		}
+		shape := buildRequestShape(s.Config, buildSystemPrompt(s.Config.ProjectPath, s.Config.Goal, s.Config.SystemPrompt))
+		params := shape.applyToBatchParams([]anthropic.MessageParam{
+			anthropic.NewUserMessage(anthropic.NewTextBlock(s.Config.Goal)),
+		})
 
 		requests[i] = anthropic.MessageBatchNewParamsRequest{
 			CustomID: s.ID,
@@ -167,10 +153,11 @@ func (s *Session) runBatchAgentLoop(ctx context.Context, client *anthropic.Clien
 	defer close(s.DoneCh)
 
 	systemPrompt := buildSystemPrompt(s.Config.ProjectPath, s.Config.Goal, s.Config.SystemPrompt)
-	toolDefs := buildToolDefinitions()
+	shape := buildRequestShape(s.Config, systemPrompt)
+	maxTurns := s.Config.MaxTurnsOrDefault() // 0 means unlimited
 	currentResponse := lastResponse
 
-	for turn := startTurn; s.Config.MaxTurns == 0 || turn < s.Config.MaxTurns; turn++ {
+	for turn := startTurn; maxTurns == 0 || turn < maxTurns; turn++ {
 		s.setTurn(turn + 1)
 
 		// Check for pause.
@@ -219,22 +206,7 @@ func (s *Session) runBatchAgentLoop(ctx context.Context, client *anthropic.Clien
 		}
 
 		// Submit a new single-item batch for this turn.
-		params := anthropic.MessageBatchNewParamsRequestParams{
-			Model:     anthropic.Model(s.Config.Model),
-			MaxTokens: 8192,
-			System: []anthropic.TextBlockParam{
-				{Text: systemPrompt},
-			},
-			Messages: messages,
-			Tools:    toolDefs,
-		}
-		if s.Config.Thinking {
-			budget := int64(s.Config.ThinkingBudget)
-			if params.MaxTokens <= budget {
-				params.MaxTokens = budget + 4096
-			}
-			params.Thinking = anthropic.ThinkingConfigParamOfEnabled(budget)
-		}
+		params := shape.applyToBatchParams(messages)
 
 		batch, err := client.Messages.Batches.New(ctx, anthropic.MessageBatchNewParams{
 			Requests: []anthropic.MessageBatchNewParamsRequest{
@@ -276,7 +248,11 @@ func (s *Session) runBatchAgentLoop(ctx context.Context, client *anthropic.Clien
 		}
 
 		msg := res.succeeded[s.ID]
-		s.addTokens(int64(msg.Usage.InputTokens), int64(msg.Usage.OutputTokens))
+		s.addUsage(msg.Usage)
+
+		if stopped := s.checkCostLimit(tuiSend); stopped {
+			return
+		}
 		messages = append(messages, msg.ToParam())
 
 		// Log any text content.
@@ -315,10 +291,10 @@ func (s *Session) runBatchAgentLoop(ctx context.Context, client *anthropic.Clien
 
 	s.setState(StateDone)
 	s.deleteSnapshot()
-	entry := LogEntry{Kind: LogSystem, Text: fmt.Sprintf("max turns (%d) reached", s.Config.MaxTurns)}
+	entry := LogEntry{Kind: LogSystem, Text: fmt.Sprintf("max turns (%d) reached", maxTurns)}
 	s.appendLog(entry)
 	tuiSend(LogMsg{SessionID: s.ID, Entry: entry})
-	tuiSend(DoneMsg{SessionID: s.ID, Err: fmt.Errorf("max turns (%d) reached", s.Config.MaxTurns)})
+	tuiSend(DoneMsg{SessionID: s.ID, Err: fmt.Errorf("max turns (%d) reached", maxTurns)})
 }
 
 // pollBatch polls a batch until it ends and returns the results.

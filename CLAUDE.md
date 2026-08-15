@@ -46,15 +46,18 @@ config/
 session/
   session.go                Session struct, state machine, thread-safe accessors, Pause/Resume
   events.go                 tea.Msg types sent to the TUI (StateMsg, LogMsg, PermissionMsg, DoneMsg)
+  params.go                 Shared request construction: model, max_tokens, thinking, effort, prompt caching
   run.go                    Agent loop: streaming API → tool dispatch → history management
   tools.go                  buildToolDefinitions() + executeTool() dispatcher
   permission.go             checkPermission(): auto-approve or block goroutine on RespCh
   persist.go                Snapshot save/load (resume across restarts)
   compress.go               Sliding-window context compression
   batch.go                  Anthropic Message Batches API: submit, poll, deliver results
-  github.go                 gh pr create on session completion
+  github.go                 push branch + gh pr create on session completion
+pricing/
+  pricing.go                Model rates + cache/batch multipliers; shared by session and tui
 tools/
-  safepath.go               Path traversal check — all file tools use SafePath()
+  safepath.go               Path traversal check — segment-wise containment, all file tools use it
   readfile.go               read_file
   writefile.go              write_file
   editfile.go               edit_file (str_replace)
@@ -113,13 +116,17 @@ See `sessions.example.yaml`. Required fields per session: `name`, `project_path`
 
 Key optional fields:
 - `model` — default `claude-opus-4-6`
-- `max_turns` — default `50`
-- `thinking` / `thinking_budget` — extended thinking
+- `max_turns` — default `50` when omitted. An explicit `0` means **unlimited turns**; a negative value falls back to the default. The field is a `*int` precisely so an omitted key and an explicit `0` stay distinguishable — read it via `SessionConfig.MaxTurnsOrDefault()`, never directly.
+- `thinking` — extended thinking. `thinking_budget` applies only to legacy models; newer models use adaptive thinking and ignore it
+- `effort` — `low`/`medium`/`high`/`max`; thinking depth and spend control on adaptive-thinking models
+- `max_output_tokens` — `max_tokens` per API call (default `8192`)
+- `max_cost_usd` — stop the session once estimated spend reaches this; `0` = no limit. Checked after each turn, so it is a stop condition rather than a hard cap. The snapshot is kept, so raising the limit and restarting resumes
+- `disable_prompt_cache` — opt out of prompt caching, which is on by default
 - `context_window` — sliding-window compression (keep first + last N messages; `0` = off)
 - `batch` — submit via Anthropic Batch API (50% cost, async, single-turn)
 - `depends_on` — list of session names that must complete before this one starts
 - `project_paths` — list of paths; each becomes its own session named `<name>-1`, `<name>-2`, etc.
-- `github.create_pr` — run `gh pr create` on completion; also `base_branch`, `title_prefix`, `draft`
+- `github.create_pr` — on completion, push the session branch and run `gh pr create`; also `base_branch`, `remote` (default `origin`), `title_prefix`, `draft`. The push is done explicitly because `gh pr create` *prompts* for where to push an unpushed branch, and the session has no TTY; `--head` is passed so gh skips its own push/fork handling
 
 ## Anthropic Go SDK patterns
 

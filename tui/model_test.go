@@ -327,7 +327,7 @@ func TestFormEnter_ClearsFieldsAfterSubmit(t *testing.T) {
 
 func TestNewSessionMsg_AddsSession(t *testing.T) {
 	m := newTestModel()
-	sc := config.SessionConfig{Name: "new", ProjectPath: "/tmp", Goal: "g", Model: "claude-sonnet-4-6", MaxTurns: 50}
+	sc := config.SessionConfig{Name: "new", ProjectPath: "/tmp", Goal: "g", Model: "claude-sonnet-4-6"}
 	s := session.New("s99", sc)
 
 	m = update(m, NewSessionMsg{Session: s})
@@ -348,7 +348,7 @@ func TestNewSessionMsg_AddsSession(t *testing.T) {
 
 func TestNewSessionMsg_SelectsNewSession(t *testing.T) {
 	m := newTestModel()
-	sc := config.SessionConfig{Name: "n", ProjectPath: "/tmp", Goal: "g", Model: "claude-sonnet-4-6", MaxTurns: 50}
+	sc := config.SessionConfig{Name: "n", ProjectPath: "/tmp", Goal: "g", Model: "claude-sonnet-4-6"}
 
 	m = update(m, NewSessionMsg{Session: session.New("s1", sc)})
 	m = update(m, NewSessionMsg{Session: session.New("s2", sc)})
@@ -360,7 +360,7 @@ func TestNewSessionMsg_SelectsNewSession(t *testing.T) {
 
 func TestNewSessionMsg_ViewHasCorrectName(t *testing.T) {
 	m := newTestModel()
-	sc := config.SessionConfig{Name: "my-session", ProjectPath: "/tmp", Goal: "g", Model: "claude-sonnet-4-6", MaxTurns: 50}
+	sc := config.SessionConfig{Name: "my-session", ProjectPath: "/tmp", Goal: "g", Model: "claude-sonnet-4-6"}
 	s := session.New("s1", sc)
 
 	m = update(m, NewSessionMsg{Session: s})
@@ -385,7 +385,7 @@ func TestQuit_WhenFormClosed(t *testing.T) {
 }
 
 func TestNavigation_UpDown(t *testing.T) {
-	sc := config.SessionConfig{Name: "s", ProjectPath: "/tmp", Goal: "g", Model: "claude-sonnet-4-6", MaxTurns: 50}
+	sc := config.SessionConfig{Name: "s", ProjectPath: "/tmp", Goal: "g", Model: "claude-sonnet-4-6"}
 	m := NewModel([]*session.Session{
 		session.New("s0", sc),
 		session.New("s1", sc),

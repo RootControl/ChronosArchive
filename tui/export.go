@@ -7,25 +7,15 @@ import (
 	"strings"
 	"time"
 
+	"github.com/chronosarchive/chronosarchive/pricing"
 	"github.com/chronosarchive/chronosarchive/session"
 )
 
-// estimateCost returns the approximate USD cost for the given model and token counts.
-// Prices are per-million-token input/output rates.
-func estimateCost(model string, inputTokens, outputTokens int64) float64 {
-	type pricing struct{ in, out float64 } // $/MTok
-	rates := map[string]pricing{
-		"claude-opus-4-6":           {15.0, 75.0},
-		"claude-sonnet-4-6":         {3.0, 15.0},
-		"claude-haiku-4-5":          {0.25, 1.25},
-		"claude-haiku-4-5-20251001": {0.25, 1.25},
-	}
-	p, ok := rates[model]
-	if !ok {
-		p = rates["claude-sonnet-4-6"] // fallback
-	}
-	return float64(inputTokens)/1e6*p.in + float64(outputTokens)/1e6*p.out
-}
+// sessionUsage collects the full token breakdown for a session.
+func sessionUsage(s *session.Session) pricing.Usage { return s.Usage() }
+
+// sessionCost returns the estimated USD cost for a session.
+func sessionCost(s *session.Session) float64 { return s.CostUSD() }
 
 // exportLog writes the session's log to a timestamped file inside the
 // project's .chronosarchive directory. Returns the output path on success.
@@ -47,9 +37,12 @@ func exportLog(s *session.Session, logs []session.LogEntry) (string, error) {
 	fmt.Fprintf(&sb, "Model:    %s\n", s.Config.Model)
 	fmt.Fprintf(&sb, "Started:  %s\n", s.StartedAt().Format(time.RFC3339))
 	fmt.Fprintf(&sb, "Exported: %s\n", time.Now().Format(time.RFC3339))
-	in, out := s.TokenUsage()
-	if in+out > 0 {
-		fmt.Fprintf(&sb, "Tokens:   %d in / %d out  ($%.4f est.)\n", in, out, estimateCost(s.Config.Model, in, out))
+	u := sessionUsage(s)
+	if u.Total() > 0 {
+		fmt.Fprintf(&sb, "Tokens:   %d in / %d out  ($%.4f est.)\n", u.Input, u.Output, sessionCost(s))
+		if u.CacheWrite+u.CacheRead > 0 {
+			fmt.Fprintf(&sb, "Cache:    %d written / %d read\n", u.CacheWrite, u.CacheRead)
+		}
 	}
 	sb.WriteString(strings.Repeat("=", 60) + "\n\n")
 

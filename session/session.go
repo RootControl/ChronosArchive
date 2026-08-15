@@ -4,7 +4,9 @@ import (
 	"sync"
 	"time"
 
+	anthropic "github.com/anthropics/anthropic-sdk-go"
 	"github.com/chronosarchive/chronosarchive/config"
+	"github.com/chronosarchive/chronosarchive/pricing"
 )
 
 // State represents the lifecycle state of a session.
@@ -98,8 +100,10 @@ type Session struct {
 	pauseCh chan struct{}
 
 	// Cumulative token usage across all turns.
-	inputTokens  int64
-	outputTokens int64
+	inputTokens      int64
+	outputTokens     int64
+	cacheWriteTokens int64 // tokens written to the prompt cache (billed ~1.25x input)
+	cacheReadTokens  int64 // tokens served from the prompt cache (billed ~0.1x input)
 
 	// Batch progress counters (non-zero only for batch sessions).
 	batchTotal     int
@@ -196,18 +200,49 @@ func (s *Session) BatchProgress() (total, succeeded, pending int) {
 	return s.batchTotal, s.batchSucceeded, s.batchPending
 }
 
-// TokenUsage returns the cumulative token counts across all turns.
+// TokenUsage returns the cumulative uncached token counts across all turns.
+// Cached tokens are reported separately by CacheUsage.
 func (s *Session) TokenUsage() (inputTokens, outputTokens int64) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.inputTokens, s.outputTokens
 }
 
-// addTokens accumulates usage from one API response.
-func (s *Session) addTokens(input, output int64) {
+// Usage returns the full token breakdown for this session.
+func (s *Session) Usage() pricing.Usage {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return pricing.Usage{
+		Input:      s.inputTokens,
+		Output:     s.outputTokens,
+		CacheWrite: s.cacheWriteTokens,
+		CacheRead:  s.cacheReadTokens,
+	}
+}
+
+// CostUSD returns the estimated spend for this session so far.
+func (s *Session) CostUSD() float64 {
+	return pricing.Estimate(s.Config.Model, s.Usage(), s.Config.Batch)
+}
+
+// CacheUsage returns the cumulative prompt-cache token counts across all turns.
+// These are billed at different rates than ordinary input tokens: writes at
+// ~1.25x and reads at ~0.1x.
+func (s *Session) CacheUsage() (writeTokens, readTokens int64) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.cacheWriteTokens, s.cacheReadTokens
+}
+
+// addUsage accumulates usage from one API response. Note that Usage.InputTokens
+// counts only the uncached remainder — total prompt size is the sum of all
+// three input figures.
+func (s *Session) addUsage(u anthropic.Usage) {
 	s.mu.Lock()
-	s.inputTokens += input
-	s.outputTokens += output
+	s.inputTokens += u.InputTokens
+	s.outputTokens += u.OutputTokens
+	s.cacheWriteTokens += u.CacheCreationInputTokens
+	s.cacheReadTokens += u.CacheReadInputTokens
 	s.mu.Unlock()
 }
 

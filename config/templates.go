@@ -12,19 +12,25 @@ type Template struct {
 	Name            string          `json:"name"`
 	Goal            string          `json:"goal,omitempty"`
 	Model           string          `json:"model,omitempty"`
-	MaxTurns        int             `json:"max_turns,omitempty"`
+	MaxTurns        *int            `json:"max_turns,omitempty"`
 	Thinking        bool            `json:"thinking"`
 	ThinkingBudget  int             `json:"thinking_budget,omitempty"`
 	ToolPermissions ToolPermissions `json:"tool_permissions"`
 }
 
-// TemplateFromSession constructs a Template from a SessionConfig.
+// TemplateFromSession constructs a Template from a SessionConfig. MaxTurns is
+// copied by value rather than sharing the pointer, so later edits to the
+// session config cannot mutate a saved template.
 func TemplateFromSession(cfg SessionConfig) Template {
+	var maxTurns *int
+	if cfg.MaxTurns != nil {
+		maxTurns = intPtr(*cfg.MaxTurns)
+	}
 	return Template{
 		Name:            cfg.Name,
 		Goal:            cfg.Goal,
 		Model:           cfg.Model,
-		MaxTurns:        cfg.MaxTurns,
+		MaxTurns:        maxTurns,
 		Thinking:        cfg.Thinking,
 		ThinkingBudget:  cfg.ThinkingBudget,
 		ToolPermissions: cfg.ToolPermissions,
