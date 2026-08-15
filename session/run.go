@@ -176,6 +176,13 @@ func (s *Session) Run(ctx context.Context, client *anthropic.Client, tuiSend fun
 		// Track cumulative token usage.
 		s.addUsage(accumulated.Usage)
 
+		// Enforce the spend ceiling. Checked after the call that incurred the
+		// cost, so the limit is a stop condition rather than a guarantee of
+		// never exceeding it — one turn's spend can carry past the line.
+		if stopped := s.checkCostLimit(tuiSend); stopped {
+			return
+		}
+
 		// Append the assistant message to history.
 		messages = append(messages, accumulated.ToParam())
 
@@ -308,6 +315,34 @@ func (s *Session) Run(ctx context.Context, client *anthropic.Client, tuiSend fun
 	s.appendLog(entry)
 	tuiSend(LogMsg{SessionID: s.ID, Entry: entry})
 	tuiSend(DoneMsg{SessionID: s.ID, Err: fmt.Errorf("max turns (%d) reached", maxTurns)})
+}
+
+// checkCostLimit stops the session when estimated spend has reached the
+// configured ceiling. It reports whether the caller should return.
+//
+// The on-disk snapshot is deliberately kept: unlike a completed goal, a
+// budget stop leaves real work unfinished, so raising max_cost_usd and
+// restarting resumes from where it stopped rather than starting over.
+func (s *Session) checkCostLimit(tuiSend func(any)) bool {
+	limit := s.Config.MaxCostUSD
+	if limit <= 0 {
+		return false
+	}
+	cost := s.CostUSD()
+	if cost < limit {
+		return false
+	}
+
+	s.setState(StateDone)
+	err := fmt.Errorf("cost limit reached: $%.4f of $%.4f budget", cost, limit)
+	s.setErr(err)
+	entry := LogEntry{Kind: LogSystem, Text: fmt.Sprintf(
+		"%v — session stopped (snapshot kept; raise max_cost_usd and restart to resume)", err,
+	)}
+	s.appendLog(entry)
+	tuiSend(LogMsg{SessionID: s.ID, Entry: entry})
+	tuiSend(DoneMsg{SessionID: s.ID, Err: err})
+	return true
 }
 
 // isRetryable returns true for transient API and network errors worth retrying.

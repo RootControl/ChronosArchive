@@ -6,6 +6,7 @@ import (
 
 	anthropic "github.com/anthropics/anthropic-sdk-go"
 	"github.com/chronosarchive/chronosarchive/config"
+	"github.com/chronosarchive/chronosarchive/pricing"
 )
 
 // State represents the lifecycle state of a session.
@@ -205,6 +206,23 @@ func (s *Session) TokenUsage() (inputTokens, outputTokens int64) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.inputTokens, s.outputTokens
+}
+
+// Usage returns the full token breakdown for this session.
+func (s *Session) Usage() pricing.Usage {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return pricing.Usage{
+		Input:      s.inputTokens,
+		Output:     s.outputTokens,
+		CacheWrite: s.cacheWriteTokens,
+		CacheRead:  s.cacheReadTokens,
+	}
+}
+
+// CostUSD returns the estimated spend for this session so far.
+func (s *Session) CostUSD() float64 {
+	return pricing.Estimate(s.Config.Model, s.Usage(), s.Config.Batch)
 }
 
 // CacheUsage returns the cumulative prompt-cache token counts across all turns.

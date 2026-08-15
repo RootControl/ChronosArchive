@@ -35,6 +35,7 @@ type SessionConfig struct {
 	RetryBaseMs     int             `yaml:"retry_base_ms"`   // base backoff in ms for retries (default 1000)
 	SystemPrompt    string          `yaml:"system_prompt"`   // optional extra instructions appended to the built-in system prompt
 
+	MaxCostUSD         float64 `yaml:"max_cost_usd"`        // stop the session once estimated spend reaches this; 0 = no limit
 	MaxOutputTokens    int    `yaml:"max_output_tokens"`    // max_tokens per API call (default 8192)
 	Effort             string `yaml:"effort"`               // low|medium|high|max — thinking/spend control on adaptive-thinking models
 	DisablePromptCache bool   `yaml:"disable_prompt_cache"` // turn off prompt caching (on by default; cuts cost on multi-turn runs)

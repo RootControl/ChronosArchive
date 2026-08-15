@@ -863,12 +863,12 @@ func (m Model) renderDetail() string {
 	}
 	if s, ok := m.sessions[sid]; ok {
 		u := sessionUsage(s)
-		if total := u.total(); total > 0 {
+		if total := u.Total(); total > 0 {
 			stat := fmt.Sprintf("%dk tok  $%.4f", total/1000, sessionCost(s))
 			// Surface cache effectiveness — a low hit rate on a long run
 			// usually means something is invalidating the prefix.
-			if u.cacheRead > 0 {
-				stat += fmt.Sprintf("  %d%% cached", u.cacheRead*100/total)
+			if u.CacheRead > 0 {
+				stat += fmt.Sprintf("  %d%% cached", u.CacheRead*100/total)
 			}
 			heading += "  " + styleGray.Render(stat)
 		}

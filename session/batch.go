@@ -249,6 +249,10 @@ func (s *Session) runBatchAgentLoop(ctx context.Context, client *anthropic.Clien
 
 		msg := res.succeeded[s.ID]
 		s.addUsage(msg.Usage)
+
+		if stopped := s.checkCostLimit(tuiSend); stopped {
+			return
+		}
 		messages = append(messages, msg.ToParam())
 
 		// Log any text content.

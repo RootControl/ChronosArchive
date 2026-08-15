@@ -1,4 +1,4 @@
-package tui
+package pricing
 
 import (
 	"math"
@@ -14,51 +14,51 @@ func approx(t *testing.T, got, want float64) {
 
 func TestEstimateCostBasic(t *testing.T) {
 	// Opus-tier list rates are $5/MTok in, $25/MTok out.
-	got := estimateCost("claude-opus-4-6", usage{input: 1_000_000, output: 1_000_000}, false)
+	got := Estimate("claude-opus-4-6", Usage{Input: 1_000_000, Output: 1_000_000}, false)
 	approx(t, got, 30.0)
 
 	// Sonnet: $3 / $15.
-	got = estimateCost("claude-sonnet-4-6", usage{input: 1_000_000, output: 1_000_000}, false)
+	got = Estimate("claude-sonnet-4-6", Usage{Input: 1_000_000, Output: 1_000_000}, false)
 	approx(t, got, 18.0)
 
 	// Haiku 4.5: $1 / $5.
-	got = estimateCost("claude-haiku-4-5", usage{input: 1_000_000, output: 1_000_000}, false)
+	got = Estimate("claude-haiku-4-5", Usage{Input: 1_000_000, Output: 1_000_000}, false)
 	approx(t, got, 6.0)
 }
 
 func TestEstimateCostUnknownModelFallsBack(t *testing.T) {
-	got := estimateCost("some-future-model", usage{input: 1_000_000}, false)
-	want := estimateCost("claude-sonnet-4-6", usage{input: 1_000_000}, false)
+	got := Estimate("some-future-model", Usage{Input: 1_000_000}, false)
+	want := Estimate("claude-sonnet-4-6", Usage{Input: 1_000_000}, false)
 	approx(t, got, want)
 }
 
 func TestEstimateCostCacheRates(t *testing.T) {
 	// Cache reads bill at ~0.1x the input rate.
-	read := estimateCost("claude-opus-4-6", usage{cacheRead: 1_000_000}, false)
-	approx(t, read, 5.0*cacheReadMultiplier)
+	read := Estimate("claude-opus-4-6", Usage{CacheRead: 1_000_000}, false)
+	approx(t, read, 5.0*CacheReadMultiplier)
 
 	// Cache writes bill at ~1.25x the input rate.
-	write := estimateCost("claude-opus-4-6", usage{cacheWrite: 1_000_000}, false)
-	approx(t, write, 5.0*cacheWriteMultiplier)
+	write := Estimate("claude-opus-4-6", Usage{CacheWrite: 1_000_000}, false)
+	approx(t, write, 5.0*CacheWriteMultiplier)
 
 	// A cached read must be far cheaper than processing the same tokens fresh.
-	fresh := estimateCost("claude-opus-4-6", usage{input: 1_000_000}, false)
+	fresh := Estimate("claude-opus-4-6", Usage{Input: 1_000_000}, false)
 	if read >= fresh {
 		t.Errorf("cache read ($%.4f) should cost less than fresh input ($%.4f)", read, fresh)
 	}
 }
 
 func TestEstimateCostBatchDiscount(t *testing.T) {
-	u := usage{input: 1_000_000, output: 500_000}
-	full := estimateCost("claude-opus-4-6", u, false)
-	batched := estimateCost("claude-opus-4-6", u, true)
+	u := Usage{Input: 1_000_000, Output: 500_000}
+	full := Estimate("claude-opus-4-6", u, false)
+	batched := Estimate("claude-opus-4-6", u, true)
 	approx(t, batched, full*0.5)
 }
 
 func TestUsageTotal(t *testing.T) {
-	u := usage{input: 10, output: 20, cacheWrite: 30, cacheRead: 40}
-	if u.total() != 100 {
-		t.Errorf("got total %d, want 100", u.total())
+	u := Usage{Input: 10, Output: 20, CacheWrite: 30, CacheRead: 40}
+	if u.Total() != 100 {
+		t.Errorf("got total %d, want 100", u.Total())
 	}
 }
 
@@ -69,7 +69,7 @@ func TestKnownModelsHaveRates(t *testing.T) {
 		"claude-opus-5", "claude-opus-4-8", "claude-opus-4-7", "claude-opus-4-6",
 		"claude-sonnet-5", "claude-sonnet-4-6", "claude-haiku-4-5", "claude-fable-5",
 	} {
-		if _, ok := modelRates[m]; !ok {
+		if _, ok := ModelRates[m]; !ok {
 			t.Errorf("no pricing entry for %s", m)
 		}
 	}

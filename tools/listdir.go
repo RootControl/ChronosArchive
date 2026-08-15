@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/fs"
+	"os"
 	"path/filepath"
 	"strings"
 )
@@ -44,21 +45,18 @@ func ListDir(projectPath string, rawInput json.RawMessage) (string, error) {
 			return nil
 		})
 	} else {
-		dirEntries, readErr := filepath.Glob(filepath.Join(abs, "*"))
+		// os.ReadDir rather than filepath.Glob: Glob's "*" skips dotfiles, so
+		// .gitignore, .env and .github/ were invisible to a non-recursive
+		// listing even though the recursive branch reported them.
+		dirEntries, readErr := os.ReadDir(abs)
 		err = readErr
-		if err == nil {
-			for _, e := range dirEntries {
-				rel, _ := filepath.Rel(abs, e)
-				info, statErr := filepath.EvalSymlinks(e)
-				if statErr == nil {
-					_ = info
-				}
-				// Check if directory
-				fi, fiErr := filepath.Abs(e)
-				if fiErr == nil {
-					_ = fi
-				}
-				entries = append(entries, rel)
+		for _, e := range dirEntries {
+			// Mark directories with a trailing slash, matching the recursive
+			// branch, so the model can tell files and directories apart.
+			if e.IsDir() {
+				entries = append(entries, e.Name()+"/")
+			} else {
+				entries = append(entries, e.Name())
 			}
 		}
 	}

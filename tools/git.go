@@ -47,6 +47,69 @@ func GitIsReadSubcommand(sub string) bool {
 	return gitReadSubcommands[strings.ToLower(sub)]
 }
 
+// splitArgs tokenises an argument string the way a shell would group words,
+// honouring single and double quotes and backslash escapes, but performing no
+// expansion of any kind — no globbing, no variable or command substitution.
+// The result is passed directly to exec as an argv slice, so there is no shell
+// to inject into.
+//
+// Splitting on whitespace alone is not adequate: `-m "my commit message"`
+// would become four arguments, and git would read the trailing words as
+// pathspecs rather than as part of the message.
+func splitArgs(s string) ([]string, error) {
+	var (
+		args    []string
+		cur     strings.Builder
+		inWord  bool
+		quote   rune // 0, '\'' or '"'
+		escaped bool
+	)
+
+	flush := func() {
+		if inWord {
+			args = append(args, cur.String())
+			cur.Reset()
+			inWord = false
+		}
+	}
+
+	for _, r := range s {
+		switch {
+		case escaped:
+			cur.WriteRune(r)
+			inWord = true
+			escaped = false
+		case r == '\\' && quote != '\'':
+			// Backslash escapes everywhere except inside single quotes.
+			escaped = true
+			inWord = true
+		case quote != 0:
+			if r == quote {
+				quote = 0 // closing quote; the word continues
+			} else {
+				cur.WriteRune(r)
+			}
+		case r == '\'' || r == '"':
+			quote = r
+			inWord = true // "" and '' are valid empty arguments
+		case r == ' ' || r == '\t' || r == '\n' || r == '\r':
+			flush()
+		default:
+			cur.WriteRune(r)
+			inWord = true
+		}
+	}
+
+	if quote != 0 {
+		return nil, fmt.Errorf("unbalanced %q quote in args", string(quote))
+	}
+	if escaped {
+		return nil, fmt.Errorf("trailing backslash in args")
+	}
+	flush()
+	return args, nil
+}
+
 // Git runs a git subcommand with optional extra args inside the project directory.
 func Git(projectPath string, rawInput json.RawMessage) (string, error) {
 	var in gitInput
@@ -63,10 +126,11 @@ func Git(projectPath string, rawInput json.RawMessage) (string, error) {
 
 	args := []string{sub}
 	if in.Args != "" {
-		// Split args naively on spaces (no shell expansion — prevents injection).
-		for _, a := range strings.Fields(in.Args) {
-			args = append(args, a)
+		parsed, err := splitArgs(in.Args)
+		if err != nil {
+			return "", fmt.Errorf("git: %w", err)
 		}
+		args = append(args, parsed...)
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -90,8 +154,15 @@ func Git(projectPath string, rawInput json.RawMessage) (string, error) {
 	if ctx.Err() == context.DeadlineExceeded {
 		return out, fmt.Errorf("git: timed out")
 	}
-	if err != nil && out == "" {
-		return "", fmt.Errorf("git %s: %w", sub, err)
+	// Report every non-zero exit. Previously a failure was only surfaced when
+	// git produced no output at all, so the common case — git writing a
+	// diagnostic to stderr and exiting non-zero — was reported as success and
+	// the agent carried on believing the command had worked.
+	if err != nil {
+		if out == "" {
+			return "", fmt.Errorf("git %s: %w", sub, err)
+		}
+		return out, fmt.Errorf("git %s: %w", sub, err)
 	}
 	if out == "" {
 		return "(no output)", nil

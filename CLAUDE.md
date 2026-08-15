@@ -54,8 +54,10 @@ session/
   compress.go               Sliding-window context compression
   batch.go                  Anthropic Message Batches API: submit, poll, deliver results
   github.go                 gh pr create on session completion
+pricing/
+  pricing.go                Model rates + cache/batch multipliers; shared by session and tui
 tools/
-  safepath.go               Path traversal check — all file tools use SafePath()
+  safepath.go               Path traversal check — segment-wise containment, all file tools use it
   readfile.go               read_file
   writefile.go              write_file
   editfile.go               edit_file (str_replace)
@@ -118,6 +120,7 @@ Key optional fields:
 - `thinking` — extended thinking. `thinking_budget` applies only to legacy models; newer models use adaptive thinking and ignore it
 - `effort` — `low`/`medium`/`high`/`max`; thinking depth and spend control on adaptive-thinking models
 - `max_output_tokens` — `max_tokens` per API call (default `8192`)
+- `max_cost_usd` — stop the session once estimated spend reaches this; `0` = no limit. Checked after each turn, so it is a stop condition rather than a hard cap. The snapshot is kept, so raising the limit and restarting resumes
 - `disable_prompt_cache` — opt out of prompt caching, which is on by default
 - `context_window` — sliding-window compression (keep first + last N messages; `0` = off)
 - `batch` — submit via Anthropic Batch API (50% cost, async, single-turn)

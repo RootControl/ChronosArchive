@@ -38,6 +38,7 @@ func main() {
 	flagMaxOutput      := flag.Int("max-output-tokens", config.DefaultMaxOutputTokens, "max output tokens per API call (used with -goal)")
 	flagEffort         := flag.String("effort",        "", "effort level: low, medium, high, or max (used with -goal)")
 	flagNoCache        := flag.Bool("no-prompt-cache", false, "disable prompt caching (on by default; caching cuts cost on multi-turn runs)")
+	flagMaxCost        := flag.Float64("max-cost-usd",  0, "stop the session once estimated spend reaches this many USD (0 = no limit)")
 
 	flag.Parse()
 
@@ -62,6 +63,7 @@ func main() {
 					MaxOutputTokens:    *flagMaxOutput,
 					Effort:             *flagEffort,
 					DisablePromptCache: *flagNoCache,
+					MaxCostUSD:         *flagMaxCost,
 					ToolPermissions: config.ToolPermissions{
 						AutoApproveReads:    *flagApproveReads,
 						AutoApproveBash:     *flagApproveBash,
